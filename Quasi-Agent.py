@@ -12,10 +12,14 @@ from litellm import exceptions as litellm_exceptions
 # Load environment variables from .env file
 load_dotenv()
 
-# Read API key
-api_key = os.getenv("OPENAI_API_KEY")
+# Read API key for Gemini Or OpenAI
+# api_key = os.getenv("OPENAI_API_KEY")
+# if not api_key:
+#     raise ValueError("OPENAI_API_KEY not found. Make sure it's in your .env file!")
+
+api_key = os.getenv("GEMINI_API_KEY")
 if not api_key:
-    raise ValueError("OPENAI_API_KEY not found. Make sure it's in your .env file!")
+    raise ValueError("GEMINI_API_KEY not found. Make sure it's in your .env file!")
 
 from typing import List, Dict
 import sys
