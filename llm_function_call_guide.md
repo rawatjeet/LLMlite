@@ -188,15 +188,3 @@ Now the AI can tell you the time when you ask!
 
 - **LiteLLM Documentation**: [docs.litellm.ai](https://docs.litellm.ai)
 - **Function Calling Guide**: Learn how AI models can call functions
-- **Python Basics**: If you're new to Python, start with functions and dictionaries
-
-## What's Next?
-
-Try modifying this script to:
-
-1. Add a function to create new files
-2. Add a function to search for specific text in files
-3. Make the AI have a conversation loop (not just one question)
-4. Add error handling for better user experience
-
-Happy coding! 🚀
