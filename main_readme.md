@@ -43,7 +43,7 @@ source venv/bin/activate
 
 Create a file called `requirements.txt` with these contents:
 
-```
+```bash
 litellm>=1.0.0
 python-dotenv>=1.0.0
 ```
@@ -58,7 +58,7 @@ pip install -r requirements.txt
 
 Create a file called `.env` in the same directory as `main.py`:
 
-```
+```bash
 OPENAI_API_KEY=sk-your-actual-api-key-here
 ```
 
@@ -147,7 +147,7 @@ This prevents overwhelming the API with rapid retry attempts.
 
 **Solution**: Make sure you have a `.env` file with your API key:
 
-```
+```bash
 OPENAI_API_KEY=sk-your-key-here
 ```
 
@@ -182,7 +182,7 @@ source venv/bin/activate
 
 ## Project Structure
 
-```
+```bash
 your-project/
 │
 ├── main.py              # Main script
@@ -242,20 +242,3 @@ Once you're comfortable with this script, try:
 - [LiteLLM Documentation](https://docs.litellm.ai/)
 - [OpenAI API Documentation](https://platform.openai.com/docs)
 - [Python dotenv Documentation](https://pypi.org/project/python-dotenv/)
-
-## License
-
-This is a learning/example script - feel free to modify and use it however you like!
-
-## Getting Help
-
-If you encounter issues:
-
-1. Check the "Common Issues" section above
-2. Review the OpenAI API status page
-3. Consult the LiteLLM documentation
-4. Check your API key and billing status
-
----
-
-**Happy coding! 🚀**

@@ -103,7 +103,7 @@ pip install -r requirements.txt
 
 Create a file named `.env` in the same folder:
 
-```
+```bash
 DEFAULT_MODEL=gemini/gemini-1.5-flash
 GEMINI_API_KEY=your_api_key_here
 ```
@@ -118,7 +118,7 @@ python LLMFunctionCall.py
 
 **Input:** "What files are in this directory?"
 
-```
+```bash
 Tool Name: list_files
 Tool Arguments: {}
 Result: ['script.py', 'data.txt', 'README.md']
@@ -126,7 +126,7 @@ Result: ['script.py', 'data.txt', 'README.md']
 
 **Input:** "Read the README.md file"
 
-```
+```bash
 Tool Name: read_file
 Tool Arguments: {'file_name': 'README.md'}
 Result: [contents of README.md]
@@ -172,15 +172,15 @@ Now the AI can tell you the time when you ask!
 
 ## Common Issues
 
-**"GEMINI_API_KEY not found"**
+### "GEMINI_API_KEY not found"
 
 - Make sure your `.env` file exists and has your API key
 
-**"ModuleNotFoundError"**
+### "ModuleNotFoundError"
 
 - Run `pip install -r requirements.txt`
 
-**"File not found" errors**
+### "File not found" errors
 
 - Make sure you're in the correct directory when running the script
 
