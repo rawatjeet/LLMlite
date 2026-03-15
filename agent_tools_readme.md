@@ -2,6 +2,31 @@
 
 An autonomous AI agent that can complete tasks by deciding which tools to use and when. This demonstrates core concepts of agentic AI systems including tool calling, autonomous decision-making, and multi-step reasoning.
 
+## Files Covered
+
+| File | Lines | Description |
+| ---- | ----- | ----------- |
+| **agent_tools.py** | 172 | Original. Custom JSON action parsing from markdown code blocks (\`\`\`action blocks). Uses `extract_markdown_block()` and `parse_action()`. Has `list_files`, `read_file`, `terminate` tools. System prompt defines tools as JSON in the prompt text. Agent loop with `while iterations < max_iterations`. Flat script structure. Defaults to `openai/gpt-4o` for generation. |
+| **agent_tools_improved.py** | 678 | Improved. Adds `write_file` and `search_files` tools. Adds `safe_json_parse()`. Has `get_system_prompt()` that dynamically injects tool schemas. Proper `run_agent()` function. `execute_tool()` with error handling. Structured CLI with `--task`, `--model`, `--max-iterations`, `--verbose`. `validate_api_key()`. Uses `pathlib.Path` for file operations. File size validation (10 MB limit). Defaults to `gemini/gemini-1.5-flash`. |
+
+## Key Architectural Distinction: Custom vs Native Tool Calling
+
+**Important:** Both `agent_tools.py` and `agent_tools_improved.py` use **CUSTOM JSON parsing** — they instruct the LLM to output tool calls inside markdown \`\`\`action blocks, then parse that text to extract and execute tools. This contrasts with **agent_loop_with_function_calling.py**, which uses **NATIVE function calling** — the LLM API's built-in tool/function-calling feature where the model returns structured tool calls that the API exposes directly. If you want native API-level function calling, see `agent_loop_with_function_calling.py`.
+
+## Original vs Improved Comparison
+
+| Aspect | agent_tools.py (Original) | agent_tools_improved.py (Improved) |
+| ------ | ------------------------- | ----------------------------------- |
+| **Tool calling** | Custom JSON parsing (\`\`\`action blocks) | Custom JSON parsing (\`\`\`action blocks) |
+| **Tools** | `list_files`, `read_file`, `terminate` | + `write_file`, `search_files` |
+| **JSON parsing** | `json.loads()` in `parse_action()` | `safe_json_parse()` with error handling |
+| **System prompt** | Static JSON in prompt text | `get_system_prompt()` dynamically injects schemas |
+| **Structure** | Flat script, inline loop | `run_agent()` function, `execute_tool()` |
+| **CLI** | Interactive only (`input()`) | `--task`, `--model`, `--max-iterations`, `--verbose` |
+| **API key** | Fails if missing | `validate_api_key()` with clear message |
+| **File ops** | `os.listdir`, `open()` | `pathlib.Path`, 10 MB size limit |
+| **Default model** | `openai/gpt-4o` | `gemini/gemini-1.5-flash` |
+
 ## 🎯 What Makes This a "True Agent"?
 
 Unlike simple scripts or even quasi-agents with fixed workflows, this agent:
@@ -33,6 +58,8 @@ The agent can use these tools to complete tasks:
 | `write_file` | Writes to a file | "Create a summary file" |
 | `search_files` | Finds files by pattern | "Find all Python files" |
 | `terminate` | Ends task with summary | Automatically used when done |
+
+*Note: `write_file` and `search_files` are available in `agent_tools_improved.py` only. The original `agent_tools.py` has `list_files`, `read_file`, and `terminate`.*
 
 ## 📋 Prerequisites
 
@@ -104,6 +131,12 @@ Run without arguments and follow prompts:
 python agent_tools.py
 ```
 
+Or with the improved version:
+
+```bash
+python agent_tools_improved.py
+```
+
 **Example interaction:**
 
 ```bash
@@ -124,26 +157,26 @@ Your task: Find all Python files and tell me how many there are
 
 ### Command-Line Mode
 
-Provide the task directly:
+Provide the task directly (improved version):
 
 ```bash
-python agent_tools.py --task "What Python files are in this directory?"
+python agent_tools_improved.py --task "What Python files are in this directory?"
 ```
 
 ### Options
 
 ```bash
 # Verbose mode (see full reasoning)
-python agent_tools.py --verbose
+python agent_tools_improved.py --verbose
 
 # Custom model
-python agent_tools.py --model openai/gpt-4
+python agent_tools_improved.py --model openai/gpt-4
 
 # Limit iterations (prevent long loops)
-python agent_tools.py --max-iterations 5
+python agent_tools_improved.py --max-iterations 5
 
 # Combine options
-python agent_tools.py --task "Read all .md files" --verbose --max-iterations 15
+python agent_tools_improved.py --task "Read all .md files" --verbose --max-iterations 15
 ```
 
 ## 📝 Example Tasks
@@ -152,36 +185,36 @@ python agent_tools.py --task "Read all .md files" --verbose --max-iterations 15
 
 ```bash
 # List all files
-python agent_tools.py --task "What files are in this directory?"
+python agent_tools_improved.py --task "What files are in this directory?"
 
 # Read a specific file
-python agent_tools.py --task "Read the README.md file"
+python agent_tools_improved.py --task "Read the README.md file"
 
 # Find specific files
-python agent_tools.py --task "Find all test files"
+python agent_tools_improved.py --task "Find all test files"
 ```
 
 ### Complex Multi-Step Tasks
 
 ```bash
 # Analyze project structure
-python agent_tools.py --task "List all Python files and tell me what each one does based on its name"
+python agent_tools_improved.py --task "List all Python files and tell me what each one does based on its name"
 
 # Content analysis
-python agent_tools.py --task "Read all .py files and tell me which ones have the word 'agent' in them"
+python agent_tools_improved.py --task "Read all .py files and tell me which ones have the word 'agent' in them"
 
 # File creation
-python agent_tools.py --task "Create a file called summary.txt with a list of all Python files"
+python agent_tools_improved.py --task "Create a file called summary.txt with a list of all Python files"
 ```
 
 ### Research Tasks
 
 ```bash
 # Project overview
-python agent_tools.py --task "Read the README and summarize what this project does"
+python agent_tools_improved.py --task "Read the README and summarize what this project does"
 
 # Code inventory
-python agent_tools.py --task "Find all Python files, read them, and create a summary of the project structure"
+python agent_tools_improved.py --task "Find all Python files, read them, and create a summary of the project structure"
 ```
 
 ## 🧠 How the Agent Works
@@ -236,7 +269,9 @@ memory = [
 
 Each step builds on previous knowledge!
 
-### Tool Execution Flow
+### Tool Execution Flow (Custom JSON Parsing)
+
+Both `agent_tools.py` and `agent_tools_improved.py` use custom parsing of ```action blocks:
 
 ```python
 # 1. Agent generates response with action
@@ -252,23 +287,19 @@ I need to list the files first to see what's available.
 
 """
 
-## 2. Parse the action
-
+# 2. Parse the action
 action = parse_action(response)
+# → {"tool_name": "list_files", "args": {}}
 
-## → {"tool_name": "list_files", "args": {}}
-
-## 3. Execute the tool
-
+# 3. Execute the tool
 result = execute_tool("list_files", {})
+# → {"result": ["file1.py", "file2.py", "README.md"]}
 
-## → {"result": ["file1.py", "file2.py", "README.md"]}
-
-## 4. Add to memory for next iteration
-
+# 4. Add to memory for next iteration
 memory.append({"role": "user", "content": json.dumps(result)})
+```
 
-```bash
+*Contrast: `agent_loop_with_function_calling.py` uses native API function calling — the LLM returns structured tool calls directly, no markdown parsing needed.*
 
 ## 🎓 Key Concepts Explained
 
@@ -383,7 +414,7 @@ Now the agent can use your custom tool!
 **Solution**: Reduce max iterations or improve system prompt:
 
 ```bash
-python agent_tools.py --max-iterations 5
+python agent_tools_improved.py --max-iterations 5
 ```
 
 ### Agent can't find files
@@ -391,7 +422,7 @@ python agent_tools.py --max-iterations 5
 **Solution**: Use verbose mode to see what's happening:
 
 ```bash
-python agent_tools.py --verbose
+python agent_tools_improved.py --verbose
 ```
 
 ### Invalid tool calls
@@ -502,7 +533,7 @@ Step 4: terminate(summary of both)
 ### Integration with Other Systems
 
 ```python
-from agent_tools import run_agent
+from agent_tools_improved import run_agent
 
 # Use in your application
 result = run_agent(

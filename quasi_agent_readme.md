@@ -1,8 +1,58 @@
 # Comparison Guide: Simple LLM Test vs Quasi-Agent
 
-A beginner's guide to understanding the differences between these two scripts.
+A beginner's guide to understanding the differences between these scripts.
 
-## 📊 Quick Comparison
+## Files Covered
+
+This readme covers two quasi-agent implementations:
+
+| File | Lines | Description |
+|------|-------|-------------|
+| **quasi-agent.py** | 247 | Original implementation with caching, 3-step workflow, and basic CLI |
+| **quasi_agent_improved.py** | 579 | Enhanced version with better prompts, dual API key support, `--no-cache`, and comprehensive documentation |
+
+---
+
+## Original vs Improved Quasi-Agent
+
+| Feature | quasi-agent.py (Original) | quasi_agent_improved.py (Improved) |
+|---------|---------------------------|-------------------------------------|
+| **API Keys** | GEMINI_API_KEY only | Both GEMINI_API_KEY and OPENAI_API_KEY via `validate_api_key()` |
+| **Caching** | SHA-256 keys, `.llm_cache/` dir | Same, plus `--no-cache` flag to disable |
+| **Cache Control** | Always on (unless env overrides) | `cache_enabled` parameter, `--no-cache` CLI flag |
+| **Module Docstring** | ❌ No | ✅ Yes (purpose, workflow overview) |
+| **Prompts** | Simple instructions | Numbered requirements (e.g., "1. Use clear names...") |
+| **Output File** | Function + tests only | Auto-generated docstring header + function + tests |
+| **Output Stats** | ❌ No | ✅ Line count, file size |
+| **Formatting** | Plain text | Emoji indicators (✅, 🔄, 💾, ⚠️, etc.) |
+| **Function Docstrings** | Minimal | Comprehensive (Args, Returns, Raises) |
+| **Default Model** | openai/gpt-4 | gemini/gemini-1.5-flash |
+| **CLI Args** | `--model`, `--mock`, `--verbose` | Same + `--no-cache` |
+| **Error Handling** | Basic | KeyboardInterrupt, verbose traceback option |
+
+### CLI Usage Examples
+
+**Original (quasi-agent.py):**
+
+```bash
+python quasi-agent.py
+python quasi-agent.py --model openai/gpt-4
+python quasi-agent.py --mock --verbose
+```
+
+**Improved (quasi_agent_improved.py):**
+
+```bash
+python quasi_agent_improved.py
+python quasi_agent_improved.py --model gemini/gemini-1.5-flash
+python quasi_agent_improved.py --mock --verbose
+python quasi_agent_improved.py --no-cache          # Disable caching (fresh API calls every time)
+python quasi_agent_improved.py --no-cache --verbose
+```
+
+---
+
+## 📊 Quick Comparison: main.py vs Quasi-Agent
 
 | Feature | main.py (Simple) | quasi-agent.py (Advanced) |
 | --------- | ------------------- | --------------------------- |
@@ -32,6 +82,14 @@ A beginner's guide to understanding the differences between these two scripts.
 - ✅ Understand multi-step AI workflows
 - ✅ See caching in action
 
+### Use `quasi_agent_improved.py` When You Want To
+
+- ✅ Everything above, plus:
+- ✅ Support for both Gemini and OpenAI keys
+- ✅ Option to disable caching with `--no-cache` (e.g., for fresh results)
+- ✅ Better prompts and output formatting
+- ✅ More detailed documentation and error handling
+
 ## 🔍 Side-by-Side Code Comparison
 
 ### 1. Simple Request (main.py)
@@ -49,7 +107,7 @@ print(response)
 Hello! How can I help you today?
 ```
 
-### 2. Multi-Step Agent (quasi-agent.py)
+### 2. Multi-Step Agent (quasi-agent.py / quasi_agent_improved.py)
 
 ```python
 # Step 1: Generate
@@ -114,7 +172,7 @@ ask("Hello") → API call → $  # Same request, pay again!
 ask("Hello") → API call → $  # Still paying!
 ```
 
-**With Caching (quasi-agent.py):**
+**With Caching (quasi-agent.py / quasi_agent_improved.py):**
 
 ```python
 # First request: cache miss, make API call
@@ -123,6 +181,13 @@ ask("Hello") → API call → $ → save to cache
 # Subsequent requests: cache hit, free!
 ask("Hello") → read cache → FREE ✅
 ask("Hello") → read cache → FREE ✅
+```
+
+**Disabling Cache (quasi_agent_improved.py only):**
+
+```bash
+python quasi_agent_improved.py --no-cache
+# Every request hits the API (useful when you want fresh results)
 ```
 
 ### 3. Error Handling
@@ -167,10 +232,13 @@ Learn in this order:
 2. Modify main.py
    └─ Learn: Customization, different prompts
    
-3. quasi-agent.py (Agent)
+3. quasi-agent.py (Original Agent)
    └─ Learn: Multi-step workflows, caching
    
-4. Build Your Own Agent
+4. quasi_agent_improved.py (Enhanced Agent)
+   └─ Learn: Better prompts, --no-cache, dual API keys
+   
+5. Build Your Own Agent
    └─ Learn: Custom workflows, tool use
 ```
 
@@ -255,10 +323,14 @@ Good for: Making sure everything is installed correctly.
 
 ### Example 2: Need Actual Code
 
-**Use quasi-agent.py:**
+**Use quasi-agent.py or quasi_agent_improved.py:**
 
 ```bash
 python quasi-agent.py
+> "validates email addresses"
+
+# Or with the improved version (supports both Gemini and OpenAI):
+python quasi_agent_improved.py
 > "validates email addresses"
 ```
 
@@ -277,13 +349,16 @@ Good for: Understanding how the AI responds.
 
 ### Example 4: Automating Repetitive Tasks
 
-**Use quasi-agent.py:**
+**Use quasi-agent.py or quasi_agent_improved.py:**
 
 ```bash
 # Generate multiple utility functions
 python quasi-agent.py  # "calculates factorial"
 python quasi-agent.py  # "checks palindrome"
 python quasi-agent.py  # "sorts dictionary"
+
+# With improved version, use --no-cache when you want fresh results each time:
+python quasi_agent_improved.py --no-cache  # "calculates factorial"
 ```
 
 Good for: Building a personal function library.
@@ -345,10 +420,11 @@ def develop_with_validation():
 
 1. Run `main.py` to understand basics
 2. Move to `quasi-agent.py` to see real applications
+3. Try `quasi_agent_improved.py` for enhanced features
 
 ### Want to Build Something?
 
-### Jump to quasi-agent.py
+### Jump to quasi-agent.py (or quasi_agent_improved.py)
 
 - Actually generates useful code
 - Learn by example
@@ -382,19 +458,24 @@ def develop_with_validation():
 
 ### Q: Which one costs more to run?
 
-**A:** Quasi-agent.py makes 3+ API calls but has caching, so repeated requests are free. Main.py makes 1 call but no caching.
+**A:** Quasi-agent.py makes 3+ API calls but has caching, so repeated requests are free. Main.py makes 1 call but no caching. Use `--no-cache` in quasi_agent_improved.py when you want fresh results (each run will hit the API).
 
 ### Q: Can I combine them?
 
 **A:** Absolutely! Use the caching from quasi-agent.py in main.py, or use the simple retry logic from main.py in your own projects.
 
+### Q: What's the difference between quasi-agent.py and quasi_agent_improved.py?
+
+**A:** The improved version adds a module docstring, dual API key support (Gemini + OpenAI), the `--no-cache` flag, enhanced prompts with numbered requirements, file headers with auto-generated docstrings, output statistics, emoji formatting, and comprehensive docstrings. See the "Original vs Improved Quasi-Agent" table above.
+
 ## 🎉 Summary
 
-| Aspect | main.py | quasi-agent.py |
-| --------- | --------------- | --------------------------- |
-| **Goal** | Learn API basics | Generate real code |
-| **Steps** | 1 (single call) | 4 (multi-step) |
-| **Cost** | Low (1 call) | Medium (3-4 calls, but cached) |
-| **Output** | Terminal text | Python file |
-| **Learning Curve** | Gentle | Moderate |
-| **Production Ready** | ❌ | ✅ |
+| Aspect | main.py | quasi-agent.py | quasi_agent_improved.py |
+| --------- | --------------- | --------------------------- | --------------------------- |
+| **Goal** | Learn API basics | Generate real code | Generate real code (enhanced) |
+| **Steps** | 1 (single call) | 4 (multi-step) | 4 (multi-step) |
+| **Cost** | Low (1 call) | Medium (3-4 calls, but cached) | Medium (3-4 calls, cached unless `--no-cache`) |
+| **Output** | Terminal text | Python file | Python file (with header, stats) |
+| **Learning Curve** | Gentle | Moderate | Moderate |
+| **Production Ready** | ❌ | ✅ | ✅ |
+| **Cache Control** | N/A | Always on | `--no-cache` flag |

@@ -2,6 +2,16 @@
 
 A production-ready framework for building sophisticated AI agents using the GAME architecture: **G**oals, **A**ctions, **M**emory, **E**nvironment.
 
+## Files Covered
+
+| File | Lines | Description |
+|------|-------|-------------|
+| **a_sample_agent_framework.py** | 413 | Original implementation. Introduces GAME architecture with hardcoded goals, fixed user input, and `openai/gpt-4o`. |
+| **a_sample_agent_framework_improved.py** | 907 | Improved version. Adds CLI, configurable model, factory function, and enhanced Memory/ActionRegistry APIs. |
+| **tool_decorators.py** | 593 | Extension. Combines GAME with `@register_tool` decorator, auto-generated JSON schemas, and `PythonActionRegistry` with tag-based filtering. |
+
+---
+
 ## 🎯 What is GAME Architecture?
 
 GAME is a structured approach to building AI agents:
@@ -60,6 +70,112 @@ This architecture separates concerns and makes agents modular, testable, and ext
 │                                                     │
 └─────────────────────────────────────────────────────┘
 ```
+
+---
+
+## Original vs Improved: Key Differences
+
+| Aspect | Original (`a_sample_agent_framework.py`) | Improved (`a_sample_agent_framework_improved.py`) |
+|--------|------------------------------------------|--------------------------------------------------|
+| **Language class** | `AgentFunctionCallingActionLanguage` | `AgentFunctionCallingLanguage` (renamed) |
+| **Action** | No `requires_confirmation` | Adds `requires_confirmation` for user approval |
+| **Memory** | `get_memories(limit)` only | Adds `get_recent_memories(count)`, `clear()`, `__len__()` |
+| **ActionRegistry** | `register`, `get_action`, `get_actions` | Adds `list_action_names()` |
+| **generate_response** | Hardcoded `openai/gpt-4o`, no model param | `generate_response(prompt, model)` with configurable model |
+| **Default model** | `openai/gpt-4o` | `gemini/gemini-1.5-flash` |
+| **Entry point** | Non-interactive, fixed `user_input` | Full CLI: `--task`, `--max-iterations`, `--verbose` |
+| **Agent creation** | Inline setup | `create_file_agent()` factory function |
+| **Error handling** | Basic | `TypeError` vs generic `Exception`, verbose tracebacks |
+| **Output** | Minimal prints | Rich progress output, iteration counts, final statistics |
+
+---
+
+## tool_decorators.py and the @register_tool Pattern
+
+`tool_decorators.py` extends the GAME framework by combining it with a decorator-based tool registration system. Instead of manually creating `Action` objects and registering them, you decorate functions with `@register_tool`.
+
+### @register_tool Decorator
+
+```python
+@register_tool(tags=["file_operations", "read"])
+def read_project_file(name: str) -> str:
+    """Reads and returns the content of a specified project file."""
+    with open(name, "r") as f:
+        return f.read()
+
+@register_tool(tags=["system"], terminal=True)
+def terminate(message: str) -> str:
+    """Terminates the agent's execution with a final message."""
+    return f"{message}\nTerminating..."
+```
+
+**Decorator parameters:**
+
+- `tool_name` — Override the tool name (default: function name)
+- `description` — Override description (default: docstring)
+- `parameters_override` — Override JSON schema (default: auto-generated)
+- `terminal` — Whether this action ends the agent loop
+- `tags` — List of tags for filtering (e.g., `["file_operations", "read"]`)
+
+### get_tool_metadata() and Auto-Generated Schemas
+
+`get_tool_metadata()` automatically derives JSON schemas from Python type hints and docstrings:
+
+- **Type hints** → JSON schema types (`str` → `"string"`, `int` → `"integer"`, etc.)
+- **Docstring** → Tool description
+- **Parameters without defaults** → `required` array
+- Skips special params like `action_context`, `action_agent`
+
+### to_openai_tools() Converter
+
+Converts tool metadata to OpenAI-compatible function calling format:
+
+```python
+openai_tools = to_openai_tools(tools_metadata)
+```
+
+---
+
+## PythonActionRegistry and Tag-Based Filtering
+
+`PythonActionRegistry` extends `ActionRegistry` to auto-load decorated tools from the global `tools` dictionary, with optional filtering by tags or tool names.
+
+### How It Works
+
+1. **Global registry**: `@register_tool` populates `tools` and `tools_by_tag` dictionaries at import time.
+2. **Filtering**: `PythonActionRegistry` accepts `tags` and/or `tool_names` to include only matching tools.
+3. **Terminate tool**: The terminate tool is tracked separately and can be registered via `register_terminate_tool()`.
+
+### Constructor
+
+```python
+PythonActionRegistry(tags=None, tool_names=None)
+```
+
+- **tags** — Include only tools that have *any* of these tags
+- **tool_names** — Include only tools whose names are in this list
+
+### Examples
+
+```python
+# Load all file_operations and system tools
+action_registry = PythonActionRegistry(tags=["file_operations", "system"])
+
+# Load only specific tools by name
+action_registry = PythonActionRegistry(tool_names=["read_project_file", "list_project_files", "terminate"])
+
+# Load all registered tools (no filter)
+action_registry = PythonActionRegistry()
+```
+
+### Tag Matching Logic
+
+A tool is included if:
+
+- `tags` is `None` **or** the tool has at least one tag in `tags`
+- **and** `tool_names` is `None` **or** the tool name is in `tool_names`
+
+---
 
 ## 🔍 Core Components Explained
 
@@ -192,6 +308,29 @@ agent = Agent(
 memory = agent.run("Do something useful")
 ```
 
+### Using tool_decorators (Decorator Pattern)
+
+```python
+from tool_decorators import (
+    Agent, Goal, Environment, AgentFunctionCallingActionLanguage,
+    PythonActionRegistry, generate_response, register_tool
+)
+
+@register_tool(tags=["file_operations"])
+def my_tool(param: str) -> str:
+    """Does something useful."""
+    return f"Processed: {param}"
+
+agent = Agent(
+    goals=[Goal(priority=1, name="Task", description="Complete the task")],
+    agent_language=AgentFunctionCallingActionLanguage(),
+    action_registry=PythonActionRegistry(tags=["file_operations", "system"]),
+    generate_response=generate_response,
+    environment=Environment()
+)
+memory = agent.run("Do something useful")
+```
+
 ## 📝 Example: File Analysis Agent
 
 The included example creates an agent that can:
@@ -201,7 +340,14 @@ The included example creates an agent that can:
 3. Generate documentation
 
 ```bash
-python a_sample_agent_framework.py --task "Analyze Python files"
+# Original (fixed task)
+python a_sample_agent_framework.py
+
+# Improved (CLI)
+python a_sample_agent_framework_improved.py --task "Analyze Python files" --verbose
+
+# With decorators
+python tool_decorators.py
 ```
 
 ## 🎓 Understanding the GAME Loop
@@ -269,6 +415,16 @@ search_action = Action(
 action_registry.register(search_action)
 ```
 
+**Or with decorator:**
+
+```python
+@register_tool(tags=["file_operations"])
+def search_files(pattern: str, directory: str = ".") -> List[str]:
+    """Search for files matching a pattern."""
+    from pathlib import Path
+    return [str(p) for p in Path(directory).glob(pattern)]
+```
+
 That's it! The agent can now use your custom action.
 
 ## 🎯 Design Patterns
@@ -334,6 +490,12 @@ recent = memory.get_recent_memories(count=5)
 
 # Remove system messages
 user_memory = memory.copy_without_system_memories()
+
+# Clear memory
+memory.clear()
+
+# Check size
+len(memory)
 ```
 
 ### Goal Prioritization
@@ -366,7 +528,7 @@ if action_registry.get_action("unknown") is None:
 ### Verbose Mode
 
 ```bash
-python a_sample_agent_framework.py --verbose
+python a_sample_agent_framework_improved.py --verbose
 ```
 
 Shows:
@@ -493,6 +655,6 @@ After mastering this framework:
 To extend this framework:
 
 1. Subclass `AgentLanguage` for custom protocols
-2. Add actions to `ActionRegistry`
+2. Add actions to `ActionRegistry` (or use `@register_tool`)
 3. Implement custom `Environment` behavior
 4. Create domain-specific `Goal` sets

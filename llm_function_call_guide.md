@@ -1,5 +1,30 @@
 # LLM Function Calling - Beginner's Guide
 
+## Files Covered
+
+This guide covers two Python scripts in this project:
+
+| File | Lines | Description |
+|------|-------|-------------|
+| **llm_function_call.py** | 99 | Original. Simple single-shot function calling demo. Flat script, no `main()` function. Defaults to `openai/gpt-4`. |
+| **llm_function_improved.py** | 204 | Improved. Structured `main()` function, better error handling, formatted output. Defaults to `gemini/gemini-1.5-flash`. |
+
+## Original vs Improved: Key Differences
+
+| Aspect | Original (`llm_function_call.py`) | Improved (`llm_function_improved.py`) |
+|--------|-----------------------------------|--------------------------------------|
+| **Structure** | Flat script, runs at import | Module docstring, structured `main()` with `if __name__ == "__main__"` |
+| **Error handling** | Minimal | Checks for no tool_calls, catches `KeyError`, `JSONDecodeError`, `PermissionError` |
+| **Output** | Plain text | Formatted output with emoji (🔧, 📋, ❌) |
+| **Tool descriptions** | Brief | More detailed (e.g., `read_file` has parameter description) |
+| **File reading** | Default encoding | Explicit `encoding="utf-8"`, handles `PermissionError` |
+| **Default model** | `openai/gpt-4` | `gemini/gemini-1.5-flash` |
+| **Edge cases** | Assumes tool_calls exist; can crash on parse errors | Handles: no tool call, unknown tool, JSON parse errors |
+
+The improved version is more robust for production use and handles edge cases like when the AI doesn't call any tools, when tool arguments fail to parse, or when the AI requests an unknown tool.
+
+---
+
 ## What Does This Code Do?
 
 This Python script creates an AI agent that can interact with files on your computer. When you ask it questions about files, it automatically uses the right tools to answer you.
@@ -111,7 +136,13 @@ GEMINI_API_KEY=your_api_key_here
 ### 3. Run the Script
 
 ```bash
-python LLMFunctionCall.py
+python llm_function_call.py
+```
+
+Or run the improved version:
+
+```bash
+python llm_function_improved.py
 ```
 
 ## Example Usage

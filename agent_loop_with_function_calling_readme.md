@@ -2,6 +2,27 @@
 
 A straightforward agent implementation using LLM's native function calling capability. This is the recommended approach for most use cases due to its simplicity and reliability.
 
+## Files Covered
+
+| File | Lines | Description |
+| ---- | ----- | ----------- |
+| `agent_loop_with_function_calling.py` | 149 | Original. Flat script with native function calling via LLM `tool_calls`. Has `list_files()`, `read_file()`, `terminate()` tools. Uses `while iterations < max_iterations` loop. Interactive mode only (prompts for task). Defaults to `openai/gpt-4`. |
+| `agent_loop_with_function_calling_improved.py` | 521 | Improved. Structured with `run_agent()`, `execute_tool()`, `validate_api_key()`, `main()`. Uses `pathlib.Path`. Adds `search_files` tool. CLI with `--task`, `--model`, `--max-iterations`, `--verbose`. File size validation (10 MB). Clean result display with item counts and truncation. Defaults to `gemini/gemini-1.5-flash`. |
+
+## Original vs Improved: Key Differences
+
+| Aspect | Original | Improved |
+| ------ | -------- | -------- |
+| **Structure** | Flat script, inline loop | Structured: `run_agent()`, `execute_tool()`, `validate_api_key()`, `main()` |
+| **Tools** | `list_files`, `read_file`, `terminate` | Adds `search_files` for pattern matching |
+| **Input** | Interactive only (`input()`) | CLI with `--task`, `--model`, `--max-iterations`, `--verbose` |
+| **File handling** | `os.listdir`, `open()` | `pathlib.Path` throughout |
+| **File size** | No limit | 10 MB validation on `read_file` |
+| **Result display** | Raw print of result | Clean display: item counts, truncation for long output |
+| **Default model** | `openai/gpt-4` | `gemini/gemini-1.5-flash` |
+| **API key** | Raises if missing | `validate_api_key()` with helpful message |
+| **Imports** | Duplicate `from litellm import completion` | Single import |
+
 ## 🎯 What This Demonstrates
 
 This script shows how to build an agent using **native function calling** - a feature built into modern LLMs that lets them directly invoke functions without custom parsing logic.
@@ -114,28 +135,40 @@ echo "GEMINI_API_KEY=your-key-here" > .env
 
 ### Basic Usage
 
+**Original (`agent_loop_with_function_calling.py`)** — interactive only:
+
 ```bash
-# Interactive mode
+# Prompts for task; no CLI options
 python agent_loop_with_function_calling.py
+```
+
+**Improved (`agent_loop_with_function_calling_improved.py`)** — full CLI:
+
+```bash
+# Interactive mode (prompts for task)
+python agent_loop_with_function_calling_improved.py
 
 # Direct task
-python agent_loop_with_function_calling.py --task "List all Python files"
+python agent_loop_with_function_calling_improved.py --task "List all Python files"
 
 # Verbose output
-python agent_loop_with_function_calling.py --verbose
+python agent_loop_with_function_calling_improved.py --verbose
 
 # Custom model
-python agent_loop_with_function_calling.py --model openai/gpt-4
+python agent_loop_with_function_calling_improved.py --model openai/gpt-4
+
+# All options
+python agent_loop_with_function_calling_improved.py --task "Find .py files" --model gemini/gemini-1.5-flash --max-iterations 15 --verbose
 ```
 
 ## 🛠️ Available Tools
 
-| Tool | Description | Example |
-| ------ | ------------- | --------- |
-| `list_files` | List files in directory | `list_files(directory=".")` |
-| `read_file` | Read file contents | `read_file(file_name="data.txt")` |
-| `search_files` | Find files by pattern | `search_files(pattern="*.py")` |
-| `terminate` | End with summary | `terminate(message="Done")` |
+| Tool | Description | Example | Version |
+| ------ | ------------- | --------- | ------- |
+| `list_files` | List files in directory | `list_files(directory=".")` | Both |
+| `read_file` | Read file contents | `read_file(file_name="data.txt")` | Both |
+| `search_files` | Find files by glob pattern | `search_files(pattern="*.py")` | Improved only |
+| `terminate` | End with summary | `terminate(message="Done")` | Both |
 
 ## 📝 Example Sessions
 
@@ -154,6 +187,8 @@ Iteration 2:
   Args: message="Found 3 Python files: main.py, agent.py, test.py"
   ✅ COMPLETED
 ```
+
+*Note: `search_files` is available in the improved version. The original uses `list_files` and filters conceptually.*
 
 ### Example 2: Read and Analyze
 
@@ -316,7 +351,7 @@ GEMINI_API_KEY=your-key
 OPENAI_API_KEY=your-key  # Alternative
 ```
 
-### Command-Line Options
+### Command-Line Options (Improved Version)
 
 ```bash
 --task "Your task"         # Task to complete

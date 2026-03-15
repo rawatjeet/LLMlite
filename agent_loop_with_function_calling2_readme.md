@@ -2,6 +2,25 @@
 
 An improved agent that extends basic function calling with batch file operations for more efficient task completion. Perfect for tasks that require processing multiple files.
 
+## Files Covered
+
+| File | Lines | Description |
+| ---- | ----- | ----------- |
+| **agent_loop_with_function_calling2.py** | 252 | Original. Extends the basic agent with `read_all_files()` batch tool and `summarize_file_content()` helper. Has `--mock` and `--task` CLI args. Has commented-out mock mode logic. Has `list_files(path)` with custom path param. Defaults to `openai/gpt-4`. |
+| **agent_loop_with_function_calling2_improved.py** | 633 | Improved. Adds `search_files` tool. Has `format_result_summary()` for cleaner output display. `read_all_files()` with `pathlib.Path`, file size checking (10 MB), and error isolation per file. Full CLI with `--task`, `--model`, `--max-iterations`, `--verbose`. Structured `run_agent()`, `execute_tool()`, `validate_api_key()`, `main()`. Defaults to `gemini/gemini-1.5-flash`. |
+
+## Original vs Improved: Key Differences
+
+| Aspect | Original (252 lines) | Improved (633 lines) |
+| ------ | -------------------- | -------------------- |
+| **Batch tool** | `read_all_files()` | `read_all_files()` with `pathlib.Path`, 10 MB size limit, per-file error isolation |
+| **Search** | ❌ None | ✅ `search_files` tool |
+| **Output formatting** | Basic print | `format_result_summary()` for cleaner result display |
+| **CLI** | `--mock`, `--task` | Full: `--task`, `--model`, `--max-iterations`, `--verbose` |
+| **Structure** | Inline script | Structured `run_agent()`, `execute_tool()`, `validate_api_key()`, `main()` |
+| **Default model** | `openai/gpt-4` | `gemini/gemini-1.5-flash` |
+| **Helper** | `summarize_file_content()` (heuristic) | `format_result_summary()` (result display) |
+
 ## 🎯 What Makes This "Enhanced"?
 
 This agent builds on the simple function calling agent by adding:
@@ -46,20 +65,22 @@ Total: 2 iterations, 1 API call
 
 - **Batch File Reading**: Read multiple files in one operation
 - **Flexible Path Support**: Work with different directories
-- **Smart Result Formatting**: Concise summaries in output
+- **Smart Result Formatting**: Concise summaries in output (`format_result_summary()` in improved version)
 - **CLI Task Specification**: Run without interaction
-- **Error Recovery**: Handles individual file errors gracefully
-- **Size Validation**: Prevents reading huge files
+- **Error Recovery**: Handles individual file errors gracefully (improved version)
+- **Size Validation**: Prevents reading huge files (10 MB limit in improved version)
 
 ## 🛠️ Available Tools
 
-| Tool | Description | When to Use |
-| ------ | ------------- | ------------- |
-| `list_files(path)` | List files in directory | See what's available |
-| `read_file(file_name)` | Read single file | Need one specific file |
-| `read_all_files(directory)` | Read ALL files at once | Need multiple files |
-| `search_files(pattern)` | Find files by pattern | Find specific file types |
-| `terminate(message)` | End with summary | Task complete |
+| Tool | Description | When to Use | Available In |
+| ------ | ------------- | ------------- | ------------- |
+| `list_files(path)` | List files in directory | See what's available | Both |
+| `read_file(file_name)` | Read single file | Need one specific file | Both |
+| `read_all_files(directory)` | Read ALL files at once | Need multiple files | Both |
+| `search_files(pattern)` | Find files by pattern | Find specific file types | **Improved only** |
+| `terminate(message)` | End with summary | Task complete | Both |
+
+*Note: The improved version adds `search_files` and enhances `read_all_files` with size checking and error isolation.*
 
 ## 🚀 Quick Start
 
@@ -73,17 +94,20 @@ echo "GEMINI_API_KEY=your-key" > .env
 ### Basic Usage
 
 ```bash
-# Interactive
+# Interactive (original)
 python agent_loop_with_function_calling2.py
 
 # Direct task
 python agent_loop_with_function_calling2.py --task "Read all Python files"
 
-# Verbose mode
-python agent_loop_with_function_calling2.py --verbose
+# Improved version - full CLI
+python agent_loop_with_function_calling2_improved.py --task "Read all Python files"
+
+# Verbose mode (improved)
+python agent_loop_with_function_calling2_improved.py --verbose
 
 # Custom model
-python agent_loop_with_function_calling2.py --model openai/gpt-4
+python agent_loop_with_function_calling2_improved.py --model openai/gpt-4
 ```
 
 ## 📝 Example Sessions
@@ -164,7 +188,7 @@ Iteration 2:
 "Summarize all logs"
 ```
 
-### search_files() - Pattern Matching
+### search_files() - Pattern Matching (Improved version)
 
 ```python
 # Use when:
@@ -222,7 +246,7 @@ def read_all_files(directory: str = ".") -> Dict[str, str]:
 
 ### Error Handling in Batch Operations
 
-Individual file errors don't stop the whole operation:
+Individual file errors don't stop the whole operation (improved version):
 
 ```python
 {
@@ -233,6 +257,10 @@ Individual file errors don't stop the whole operation:
 ```
 
 The agent sees what succeeded and what failed, then adapts.
+
+### format_result_summary() — Notable Improvement
+
+The improved version includes `format_result_summary()` to present tool results in a cleaner, more readable format. Instead of dumping raw JSON or long strings, it produces concise summaries that make it easier for users (and the agent) to understand batch read results, file counts, and error conditions.
 
 ## 🎯 Use Cases
 
@@ -281,7 +309,7 @@ The agent sees what succeeded and what failed, then adapts.
 | **Cost Efficiency** | Baseline | 80%+ savings |
 | **Complexity** | Low | Low-Medium |
 | **Best For** | 1-2 files | Multiple files |
-| **Code Size** | 200 lines | 250 lines |
+| **Code Size** | 200 lines | 250–630 lines |
 
 ## ⚙️ Configuration
 
@@ -297,9 +325,10 @@ GEMINI_API_KEY=your-key
 
 ```bash
 --task "Task description"   # Run non-interactively
---model MODEL_NAME          # Specify model
---max-iterations N          # Set iteration limit
---verbose                   # Detailed output
+--model MODEL_NAME          # Specify model (improved)
+--max-iterations N          # Set iteration limit (improved)
+--verbose                   # Detailed output (improved)
+--mock                      # Mock mode without LLM (original only)
 ```
 
 ## 🔧 Adding Custom Batch Operations
@@ -344,7 +373,7 @@ TOOLS.append({
 
 ### "File too large" Errors
 
-**Problem**: Some files exceed 10MB limit
+**Problem**: Some files exceed 10MB limit (improved version)
 
 **Solutions**:
 
@@ -372,7 +401,7 @@ TOOLS.append({
 
 **Solutions**:
 
-1. Use `search_files()` to filter first
+1. Use `search_files()` to filter first (improved version)
 2. Process subdirectories separately
 3. Increase iteration limit
 
@@ -390,7 +419,7 @@ TOOLS.append({
    --task "Read main.py, then agent.py, then utils.py..."
    ```
 
-2. **Filter before reading**
+2. **Filter before reading** (improved version)
 
    ```bash
    # Filter first, then read
@@ -424,7 +453,7 @@ TOOLS.append({
 # Multiple files → read_all_files
 "Read all config files"
 
-# Filter needed → search_files + read_all_files
+# Filter needed → search_files + read_all_files (improved)
 "Find and read all test files"
 ```
 
@@ -451,7 +480,7 @@ result = {
 
 ## 🚀 Advanced Patterns
 
-### Pattern 1: Filtered Batch Reading
+### Pattern 1: Filtered Batch Reading (Improved version)
 
 ```python
 Task: "Read all test files"
@@ -482,9 +511,9 @@ Step 2: read_all_files() if < 10 files, else read_file() selectively
 ## 📊 Performance Tips
 
 1. **Batch when possible**: Use `read_all_files` for multiple files
-2. **Filter first**: Use `search_files` before reading
+2. **Filter first**: Use `search_files` before reading (improved version)
 3. **Limit scope**: Read specific directories, not entire filesystem
-4. **Check sizes**: Tool automatically skips files > 10MB
+4. **Check sizes**: Tool automatically skips files > 10MB (improved version)
 
 ## 🔒 Security Considerations
 

@@ -1,12 +1,37 @@
 # LiteLLM API Test Script
 
-A beginner-friendly Python script to test OpenAI API calls using LiteLLM with automatic retry logic and error handling.
+A beginner-friendly Python script to test API calls using LiteLLM with automatic retry logic and error handling. Supports both OpenAI and Google Gemini models.
+
+## Files Covered
+
+This documentation covers two implementations:
+
+| File | Lines | Description |
+|------|-------|-------------|
+| `main.py` | 67 | Original script — minimal, straightforward implementation |
+| `main_improved.py` | 220 | Enhanced version — structured, feature-rich, with better UX |
+
+## Original vs Improved
+
+**`main.py`** is the original implementation: it uses the OpenAI API key, `call_with_retries()` with exponential backoff, and argparse with `--mock` and `--retries` flags. The model is hardcoded as `gpt-4.1`. It’s a compact, no-frills script.
+
+**`main_improved.py`** extends the original with:
+
+- **`load_api_key()`** — Loads and validates the API key from `.env` in a dedicated function
+- **`run_test_call()`** — Wrapper for running test calls with clear separation of concerns
+- **Structured `main()`** — Entry point with try/except, formatted output, and exit codes
+- **`--model` flag** — Choose the model at runtime (default: `gpt-3.5-turbo`) instead of hardcoding
+- **Formatted output** — Emoji indicators (✓, ⚠, ❌) and clearer progress messages
+- **Docstrings** — Documentation for all main functions
+- **Error handling** — More informative error messages and usage hints
+
+Use `main.py` for a minimal setup; use `main_improved.py` for a more polished, feature-rich experience.
 
 ## What This Script Does
 
 This script helps you:
 
-- Test your OpenAI API connection
+- Test your API connection (OpenAI or Gemini)
 - Handle rate limiting automatically (retries with exponential backoff)
 - Practice making API calls in a safe environment
 - Learn basic API error handling
@@ -16,7 +41,7 @@ This script helps you:
 Before running this script, you need:
 
 1. **Python 3.7 or higher** - [Download Python](https://www.python.org/downloads/)
-2. **An OpenAI API key** - [Get one here](https://platform.openai.com/api-keys)
+2. **An API key** — OpenAI and/or Gemini (see API Key Setup below)
 3. **Basic command line knowledge** - How to open a terminal/command prompt
 
 ## Installation
@@ -56,11 +81,18 @@ pip install -r requirements.txt
 
 ### Step 4: Set Up Your API Key
 
-Create a file called `.env` in the same directory as `main.py`:
+Create a file called `.env` in the same directory as the scripts:
 
 ```bash
+# For OpenAI models (gpt-4, gpt-3.5-turbo, etc.)
 OPENAI_API_KEY=sk-your-actual-api-key-here
+
+# For Gemini models (gemini-pro, gemini-1.5-pro, etc.)
+# LiteLLM automatically uses GEMINI_API_KEY when you specify a Gemini model
+GEMINI_API_KEY=your-gemini-api-key-here
 ```
+
+You can use one or both keys. LiteLLM selects the appropriate key based on the model you specify.
 
 ⚠️ **Important**: Never share your `.env` file or commit it to git! Add it to `.gitignore`:
 
@@ -76,6 +108,8 @@ Run a simple test call:
 
 ```bash
 python main.py
+# or
+python main_improved.py
 ```
 
 ### Mock Mode (No API Credits Used)
@@ -84,13 +118,18 @@ Test the script without making a real API call:
 
 ```bash
 python main.py --mock
+# or
+python main_improved.py --mock
 ```
 
 ### Use a Specific Model
 
 ```bash
-python main.py --model gpt-4
+python main_improved.py --model gpt-4
+python main_improved.py --model gemini-1.5-flash
 ```
+
+> **Note:** `main.py` does not support `--model`; it uses a hardcoded model.
 
 ### Allow More Retries
 
@@ -98,19 +137,21 @@ If you're experiencing rate limits, increase retry attempts:
 
 ```bash
 python main.py --retries 5
+# or
+python main_improved.py --retries 5
 ```
 
 ### Combine Options
 
 ```bash
-python main.py --model gpt-4 --retries 5
+python main_improved.py --model gpt-4 --retries 5
 ```
 
 ## Understanding the Code
 
 ### Key Functions
 
-#### `load_api_key()`
+#### `load_api_key()` *(main_improved.py only)*
 
 Loads your API key from the `.env` file and validates it exists.
 
@@ -122,7 +163,7 @@ The heart of the script - makes API calls with automatic retry logic:
 - Uses exponential backoff (waits longer each time)
 - Provides clear error messages
 
-#### `run_test_call()`
+#### `run_test_call()` *(main_improved.py only)*
 
 A simple wrapper that sends a test message to the API.
 
@@ -149,6 +190,12 @@ This prevents overwhelming the API with rapid retry attempts.
 
 ```bash
 OPENAI_API_KEY=sk-your-key-here
+```
+
+For Gemini models, add:
+
+```bash
+GEMINI_API_KEY=your-gemini-key-here
 ```
 
 ### "Rate limit exceeded"
@@ -185,38 +232,49 @@ source venv/bin/activate
 ```bash
 your-project/
 │
-├── main.py              # Main script
+├── main.py              # Original script (67 lines)
+├── main_improved.py      # Enhanced script (220 lines)
 ├── requirements.txt     # Python dependencies
-├── .env                # Your API key (DO NOT COMMIT!)
-├── .gitignore          # Tells git to ignore .env
-└── README.md           # This file
+├── .env                 # Your API keys (DO NOT COMMIT!)
+├── .gitignore           # Tells git to ignore .env
+└── main_readme.md       # This file
 ```
 
 ## Available Models
 
-Common models you can use with the `--model` flag:
+The project supports both **OpenAI** and **Google Gemini** models via LiteLLM. Use the `--model` flag (in `main_improved.py`) or set the model in code.
 
-- `gpt-3.5-turbo` - Fast and cost-effective (default)
+### OpenAI Models
+
+- `gpt-3.5-turbo` - Fast and cost-effective (default in main_improved.py)
 - `gpt-4` - More capable, higher cost
 - `gpt-4-turbo` - GPT-4 performance, faster
 - `gpt-4o` - Latest multimodal model
 
 Check [OpenAI's model documentation](https://platform.openai.com/docs/models) for the latest options.
 
+### Gemini Models
+
+- `gemini/gemini-pro` - Standard Gemini model
+- `gemini/gemini-1.5-pro` - Pro model with larger context
+- `gemini/gemini-1.5-flash` - Fast, efficient model
+
+Requires `GEMINI_API_KEY` in your `.env` file. Get a key at [Google AI Studio](https://makersuite.google.com/app/apikey).
+
 ## Cost Considerations
 
 API calls cost money! Here are some tips:
 
 1. **Use mock mode** (`--mock`) when testing your code
-2. **Start with `gpt-3.5-turbo`** - it's cheaper than GPT-4
-3. **Monitor your usage** at <https://platform.openai.com/account/usage>
-4. **Set usage limits** in your OpenAI account settings
+2. **Start with `gpt-3.5-turbo` or `gemini-1.5-flash`** - they're cheaper than premium models
+3. **Monitor your usage** at <https://platform.openai.com/account/usage> (OpenAI) or Google AI Studio (Gemini)
+4. **Set usage limits** in your provider account settings
 
 ## Security Best Practices
 
 ✅ **DO:**
 
-- Keep your API key in the `.env` file
+- Keep your API keys in the `.env` file
 - Add `.env` to `.gitignore`
 - Use environment variables for sensitive data
 - Rotate your API keys periodically
@@ -241,4 +299,5 @@ Once you're comfortable with this script, try:
 
 - [LiteLLM Documentation](https://docs.litellm.ai/)
 - [OpenAI API Documentation](https://platform.openai.com/docs)
+- [Google Gemini API](https://ai.google.dev/docs)
 - [Python dotenv Documentation](https://pypi.org/project/python-dotenv/)
