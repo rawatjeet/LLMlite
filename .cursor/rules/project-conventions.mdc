@@ -1,0 +1,63 @@
+---
+description: Core conventions for the LLMlite agent learning project
+globs: "**/*.py"
+alwaysApply: true
+---
+
+# LLMlite Project Conventions
+
+## Project Overview
+This is a learning-oriented project that teaches AI agent patterns using Python and LiteLLM.
+Every Python file follows a progression from simple API calls to full agent frameworks.
+
+## Code Style
+- Use `litellm.completion()` for all LLM calls (never raw OpenAI/Gemini SDKs directly).
+- Load API keys from `.env` using `python-dotenv`. Never hardcode keys.
+- Support both `GEMINI_API_KEY` and `OPENAI_API_KEY` via `validate_api_key()` or equivalent.
+- Use `DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "gemini/gemini-1.5-flash")` as the default.
+- Every agent script must have a CLI with `argparse` and support `--task`, `--model`, `--verbose`.
+- Use `if __name__ == "__main__"` guard and `sys.exit(main())` pattern.
+
+## File Naming
+- Original scripts: `name.py`
+- Improved versions: `name_improved.py`
+- Documentation: `name_readme.md`
+- Each pair (original + improved) teaches the same concept at different levels.
+
+## Agent Patterns Used
+- **Simple call**: `main.py` (single LLM call)
+- **Quasi-agent**: `quasi-agent.py` (multi-step, no loop)
+- **Function calling**: `llm_function_call.py`, `agent_loop_with_function_calling*.py`
+- **Custom JSON parsing**: `agent_tools.py` (manual action parsing)
+- **GAME framework**: `a_sample_agent_framework.py` (Goals, Actions, Memory, Environment)
+- **ReAct**: `agent_react.py` (Thought -> Action -> Observation)
+- **Plan-and-Execute**: `agent_planner.py` (Plan phase -> Execute phase)
+- **Conversational**: `agent_conversational.py` (REPL with persistent sessions)
+- **Multi-agent**: `agent_multi.py` (Router + specialist sub-agents)
+
+## Tool Definitions
+When defining tools for function calling, use the OpenAI-compatible format:
+```python
+{
+    "type": "function",
+    "function": {
+        "name": "tool_name",
+        "description": "What it does",
+        "parameters": {
+            "type": "object",
+            "properties": { ... },
+            "required": [ ... ]
+        }
+    }
+}
+```
+
+## Error Handling
+- Always wrap LLM calls in try/except.
+- Support `--verbose` flag that shows tracebacks.
+- Handle `KeyboardInterrupt` gracefully.
+- Rate limit errors: implement retry with exponential backoff.
+
+## Dependencies
+- Only three core dependencies: `python-dotenv`, `litellm`, `PyPDF2`
+- Keep it minimal so beginners can set up easily.

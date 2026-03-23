@@ -1,0 +1,30 @@
+---
+description: Code quality and safety rules
+globs: "**/*.py"
+alwaysApply: true
+---
+
+# Code Quality Rules
+
+## Security
+- NEVER commit `.env` files or API keys.
+- NEVER hardcode API keys, tokens, or secrets in source code.
+- Always read keys from environment variables via `os.getenv()`.
+- The `.gitignore` must include: `.env`, `.llm_cache/`, `.agent_sessions/`, `__pycache__/`
+
+## Python Style
+- Use type hints for function signatures.
+- Use `pathlib.Path` over `os.path` for file operations in new code.
+- Prefer f-strings over `.format()` or `%` formatting.
+- Use `encoding='utf-8'` when opening files.
+
+## LLM Calls
+- Always use `litellm.completion()` as the single abstraction layer.
+- Set `max_tokens` explicitly to avoid runaway costs.
+- Handle `RateLimitError` with retry + exponential backoff.
+- For agents, cap iterations (default 10-50) to prevent infinite loops.
+
+## Documentation
+- Every Python file needs a module-level docstring.
+- Public functions need docstrings with Args/Returns.
+- Each major agent file should have a companion `_readme.md`.

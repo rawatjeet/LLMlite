@@ -1,0 +1,51 @@
+---
+description: Rules for developing new agent scripts in this project
+globs: "agent_*.py,*agent*.py"
+alwaysApply: false
+---
+
+# Agent Development Rules
+
+## When Creating a New Agent File
+1. Start with the standard boilerplate:
+   - `try: from dotenv import load_dotenv` with `ModuleNotFoundError` handler
+   - `load_dotenv()` call
+   - API key validation supporting both Gemini and OpenAI
+   - `DEFAULT_MODEL` from env with fallback
+
+2. Include a module docstring explaining:
+   - What agent pattern this implements
+   - How it differs from other agents in the project
+   - Usage examples with CLI commands
+
+3. Every agent must have:
+   - A `run_*` function that encapsulates the agent loop
+   - A `main()` function with `argparse` CLI
+   - A `terminate` or `finish` action to end the loop
+   - Max iteration guard to prevent infinite loops
+   - Pretty-printed output with step indicators
+
+## Agent Loop Structure
+Follow this standard loop pattern:
+```
+while iteration < max_iterations:
+    1. Construct prompt (system + memory)
+    2. Call LLM
+    3. Parse response to extract action
+    4. Execute action / tool
+    5. Check termination condition
+    6. Update memory with response + result
+    7. Increment iteration
+```
+
+## Tool Consistency
+Reuse the common tool set across agents for consistency:
+- `list_files(directory)` - list directory contents
+- `read_file(file_name)` - read file content
+- `write_file(file_name, content)` - write to file
+- `search_files(pattern, directory)` - glob search
+- `terminate/finish(message)` - end the loop
+
+## Testing New Agents
+Run with `--verbose` to see full LLM responses and tool results.
+Test with a simple task first: "List all Python files in this directory"
