@@ -13,9 +13,10 @@ Most agent tutorials jump straight to frameworks like LangChain or CrewAI. This 
 - How LLM API calls work (retries, rate limits, caching)
 - How to give an LLM access to tools (function calling)
 - How to build an autonomous agent loop (decide → act → observe → repeat)
-- Four distinct agent architectures (ReAct, Plan-and-Execute, Conversational, Multi-Agent)
+- Seven distinct agent architectures (ReAct, Plan-and-Execute, Conversational, Multi-Agent, Self-Healing, RAG, Generator-Critic)
 - The GAME framework (Goals, Actions, Memory, Environment)
 - Decorator-based tool registration for production systems
+- A complete guide on how to build your own agent from scratch
 
 ---
 
@@ -47,7 +48,7 @@ python agent_react.py --task "What Python files are in this project?"
 
 ## Learning Progression
 
-The project is organized into 7 levels. Work through them in order, or jump to any level that interests you.
+The project is organized into 8 levels. Work through them in order, or jump to any level that interests you.
 
 ```
 Level 1  main.py                              Simple API call with retries
@@ -68,7 +69,13 @@ Level 6  agent_react.py                       ReAct: Thought → Action → Obse
    |
 Level 7  agent_conversational.py              Multi-turn chat with persistent sessions
          agent_multi.py                       Router + specialist sub-agents
+   |
+Level 8  agent_self_healing.py                Generate code → Execute → Fix → Repeat
+         agent_rag.py                         Index files → Retrieve chunks → Grounded answers
+         agent_critic.py                      Generate → Critique → Refine → Repeat
 ```
+
+> **New:** See [`AGENT_BUILDING_GUIDE.md`](AGENT_BUILDING_GUIDE.md) for a complete walkthrough on the process and requirements of building any new agent.
 
 ---
 
@@ -175,6 +182,29 @@ python agent_multi.py --task "Analyze this project and write documentation"
 python agent_multi.py --task "Find all agent patterns and compare them" --verbose
 ```
 
+### Level 8: Specialized Agents
+
+| File | Lines | Pattern | Key Idea |
+|------|-------|---------|----------|
+| `agent_self_healing.py` | ~250 | **Self-Healing** | Generates code, executes in sandbox, feeds errors back to LLM for automatic fixes. |
+| `agent_rag.py` | ~290 | **RAG** | Indexes files into chunks, retrieves relevant pieces via TF-IDF, generates grounded answers with citations. |
+| `agent_critic.py` | ~260 | **Generator-Critic** | Two-persona loop: Generator creates output, Critic reviews it, Refiner improves it. Supports code/text/plan modes. |
+
+```bash
+# Self-Healing — code that fixes itself
+python agent_self_healing.py --task "Write a function to check if a number is prime"
+python agent_self_healing.py --task "Implement merge sort" --max-retries 5 --save sort.py
+
+# RAG — Q&A grounded in your actual codebase
+python agent_rag.py --task "How does the agent loop work?"
+python agent_rag.py --task "What tools are available?" --top-k 8
+
+# Generator-Critic — higher quality through self-review
+python agent_critic.py --task "Write a binary search tree class"
+python agent_critic.py --task "Write a project README" --mode text --rounds 3
+python agent_critic.py --task "Plan a REST API migration" --mode plan
+```
+
 ---
 
 ## Agent Pattern Comparison
@@ -188,6 +218,9 @@ python agent_multi.py --task "Find all agent patterns and compare them" --verbos
 | **Plan-and-Execute** | `agent_planner.py` | Per-step | **Explicit plan** | In-memory | No | Structured tasks |
 | **Conversational** | `agent_conversational.py` | Hidden | None | **Persistent (disk)** | **Yes** | Assistant / chat |
 | **Multi-Agent** | `agent_multi.py` | Per-agent | **Router decides** | Per-agent | No | Complex, multi-skill tasks |
+| **Self-Healing** | `agent_self_healing.py` | Fix-focused | None | Error history | No | Code that must execute |
+| **RAG** | `agent_rag.py` | Grounded | None | TF-IDF index | No | Q&A over documents |
+| **Generator-Critic** | `agent_critic.py` | Two-persona | None | Critique history | No | High-quality output |
 
 ### When to Use What
 
@@ -196,7 +229,11 @@ python agent_multi.py --task "Find all agent patterns and compare them" --verbos
 - **"The task has clear steps"** → `agent_planner.py`
 - **"I want to have a conversation"** → `agent_conversational.py`
 - **"The task needs multiple skills"** → `agent_multi.py`
+- **"I need code that actually runs"** → `agent_self_healing.py`
+- **"I need answers grounded in my files"** → `agent_rag.py`
+- **"Quality matters more than speed"** → `agent_critic.py`
 - **"I'm building a production system"** → `a_sample_agent_framework_improved.py` + `tool_decorators.py`
+- **"I want to build my own agent"** → Start with [`AGENT_BUILDING_GUIDE.md`](AGENT_BUILDING_GUIDE.md)
 
 ---
 
@@ -219,6 +256,15 @@ Every agent has a dedicated readme with architecture diagrams, example sessions,
 | [`agent_planner_readme.md`](agent_planner_readme.md) | Plan-and-Execute, step tracking, synthesis |
 | [`agent_conversational_readme.md`](agent_conversational_readme.md) | Persistent sessions, resume, in-chat commands |
 | [`agent_multi_readme.md`](agent_multi_readme.md) | Router + specialists, context flow, adding agents |
+| [`agent_self_healing_readme.md`](agent_self_healing_readme.md) | Self-healing code generation, sandbox execution |
+| [`agent_rag_readme.md`](agent_rag_readme.md) | RAG pattern, TF-IDF retrieval, grounded answers |
+| [`agent_critic_readme.md`](agent_critic_readme.md) | Generator-Critic pattern, multi-mode refinement |
+
+### Guides
+
+| Guide | Covers |
+|-------|--------|
+| [`AGENT_BUILDING_GUIDE.md`](AGENT_BUILDING_GUIDE.md) | **Complete walkthrough for building a new agent** — requirements, pattern selection, tool design, loop structure, memory, safety, testing, and common pitfalls |
 
 ### Cross-Cutting Comparisons
 
@@ -279,6 +325,11 @@ LLMlite/
 ├── agent_conversational.py                      # Multi-turn chat + persistent sessions
 ├── agent_multi.py                               # Router + specialist sub-agents
 │
+│  ── Level 8: Specialized Agents ──
+├── agent_self_healing.py                        # Generate → Execute → Fix loop
+├── agent_rag.py                                 # Index → Retrieve → Generate (RAG)
+├── agent_critic.py                              # Generate → Critique → Refine loop
+│
 │  ── Utilities ──
 ├── template.py                                  # Boilerplate for new scripts
 ├── md_to_pdf.py                                 # Markdown → PDF converter
@@ -299,6 +350,10 @@ LLMlite/
 ├── agent_planner_readme.md                      # Guide: Plan-and-Execute
 ├── agent_conversational_readme.md               # Guide: conversational agent
 ├── agent_multi_readme.md                        # Guide: multi-agent orchestrator
+├── agent_self_healing_readme.md                 # Guide: self-healing code agent
+├── agent_rag_readme.md                          # Guide: RAG agent
+├── agent_critic_readme.md                       # Guide: generator-critic agent
+├── AGENT_BUILDING_GUIDE.md                      # How to build your own agent
 │
 │  ── Generated Output (from quasi-agent) ──
 ├── factorial.py                                 # Example generated code
@@ -415,9 +470,19 @@ python agent_multi.py --task "Document this project"
 
 Read: `agent_react_readme.md` → `agent_planner_readme.md` → `agent_conversational_readme.md` → `agent_multi_readme.md`
 
-### Week 5: Build Your Own
+### Week 5: Specialized Patterns
 
-Take what you've learned and:
+```bash
+python agent_self_healing.py --task "Write a palindrome checker"
+python agent_rag.py --task "What patterns are used in this project?"
+python agent_critic.py --task "Write a stack data structure" --rounds 2
+```
+
+Read: `agent_self_healing_readme.md` → `agent_rag_readme.md` → `agent_critic_readme.md`
+
+### Week 6: Build Your Own
+
+Read [`AGENT_BUILDING_GUIDE.md`](AGENT_BUILDING_GUIDE.md) first, then:
 1. Add a new tool to an existing agent
 2. Create a new specialist in `agent_multi.py`
 3. Combine ReAct reasoning with Plan-and-Execute structure
@@ -440,6 +505,9 @@ Take what you've learned and:
 | **Plan-and-Execute** | `agent_planner.py` | LLM creates plan upfront, then executes step by step |
 | **Session persistence** | `agent_conversational.py` | Conversations saved to `.agent_sessions/` as JSON |
 | **Multi-agent delegation** | `agent_multi.py` | Router assigns work to Code Analyst / Writer / Researcher |
+| **Self-healing loop** | `agent_self_healing.py` | Generate → execute → catch error → fix → retry |
+| **TF-IDF retrieval** | `agent_rag.py` | Keyword-based search over file chunks, no vector DB needed |
+| **Generator-Critic** | `agent_critic.py` | Two-persona refinement: generate, critique (5 categories), refine |
 
 ---
 
@@ -447,12 +515,13 @@ Take what you've learned and:
 
 To add a new agent:
 
-1. Copy `template.py` as a starting point
-2. Follow the conventions in `.cursor/rules/agent-development.mdc`
-3. Include: module docstring, `argparse` CLI, `--task`/`--model`/`--verbose` flags
-4. Create a companion `_readme.md`
-5. Generate PDF with `python md_to_pdf.py your_agent_readme.md`
-6. Update this README with the new entry
+1. Read [`AGENT_BUILDING_GUIDE.md`](AGENT_BUILDING_GUIDE.md) for the full process
+2. Copy `template.py` as a starting point
+3. Follow the conventions in `.cursor/rules/agent-development.mdc`
+4. Include: module docstring, `argparse` CLI, `--task`/`--model`/`--verbose` flags
+5. Create a companion `_readme.md`
+6. Generate PDF with `python md_to_pdf.py your_agent_readme.md`
+7. Update this README with the new entry
 
 ---
 
