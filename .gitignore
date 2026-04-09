@@ -3,3 +3,6 @@ __pycache__/
 logs/
 .llm_cache/
 .agent_sessions/
+.resume_sessions/
+.job_search/
+resumes_output/
