@@ -58,6 +58,22 @@ User Task
 | `read_file` | Read resume, cover letter, or other files |
 | `add_job` | Add a new job posting to the local database |
 
+## CLI subcommands
+
+Everything lives on **one script** (`agent_job_seeker.py`); extend behavior here rather than splitting readmes per feature. The parser today uses **flags**, not argparse `run`/`search` subcommands, but naming operations like subcommands keeps docs and scripts consistent—especially if you later add literal subparsers without new `.md` files.
+
+| Subcommand (name) | How to run today | Purpose |
+|---|---|---|
+| `interactive` | `python agent_job_seeker.py` (no `--task`), or `--interactive` | REPL browse mode; `--resume-file` enables `score` / `apply` in-session. |
+| `run` | `python agent_job_seeker.py --task "…"` | Plan-and-execute over the tools; optional `--resume-file`. |
+| `search` | `search <keywords>` in interactive mode, or `--task "Find …"` | Filter the local job DB (or steer the planner to search). |
+| `ingest` / `add` | `add` in interactive mode, or `--task "Add this job …"` / planner using `add_job` | Seed the DB from a posting you pasted elsewhere. |
+| `tailor` | `--task "Tailor resume / keywords for JOB-XXX" --resume-file …` (phrase your task clearly) | LLM-driven edits on top of the same pipeline (no separate agent file). |
+
+**Global flags:** `--model`, `--resume-file`, `--verbose` compose with `run` / `interactive` as noted in [Usage Examples](#usage-examples).
+
+**REPL “subcommands”** (inside `interactive`): see [Interactive Commands](#interactive-commands) below—those are separate from argv but the same naming idea.
+
 ## Usage Examples
 
 ```bash
