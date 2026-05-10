@@ -32,6 +32,9 @@ import os
 import re
 import sys
 import math
+import json
+import time
+import hashlib
 import argparse
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional
@@ -45,6 +48,7 @@ DEFAULT_MAX_TOKENS = int(os.getenv("DEFAULT_MAX_TOKENS", "2048"))
 DEFAULT_TOP_K = 5
 DEFAULT_CHUNK_SIZE = 40  # lines per chunk
 DEFAULT_CHUNK_OVERLAP = 10  # overlapping lines between chunks
+DEFAULT_RAG_CACHE_DIR = os.getenv("RAG_CACHE_DIR", ".rag_cache")
 
 
 # ---------------------------------------------------------------------------
@@ -88,39 +92,115 @@ def chunk_file(file_path: str, chunk_size: int, overlap: int) -> List[Dict]:
     return chunks
 
 
+def _collect_index_files(
+    directory: str, extensions: List[str]
+) -> List[Path]:
+    """Return the (filtered) list of files that index_directory would chunk."""
+    root = Path(directory)
+    files: List[Path] = []
+    for ext in extensions:
+        for file_path in sorted(root.rglob(f"*{ext}")):
+            if any(part.startswith(".") for part in file_path.parts):
+                continue
+            if "__pycache__" in str(file_path):
+                continue
+            try:
+                size = file_path.stat().st_size
+            except OSError:
+                continue
+            if size > 500_000 or size == 0:
+                continue
+            files.append(file_path)
+    return files
+
+
+def _index_signature(
+    files: List[Path], chunk_size: int, overlap: int, extensions: List[str]
+) -> str:
+    """Stable cache key based on file paths + mtimes + sizes + chunking config."""
+    parts = [
+        f"chunk={chunk_size}",
+        f"overlap={overlap}",
+        "ext=" + ",".join(sorted(extensions)),
+    ]
+    for path in files:
+        try:
+            stat = path.stat()
+            parts.append(f"{path}|{int(stat.st_mtime)}|{stat.st_size}")
+        except OSError:
+            continue
+    digest = hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()
+    return digest[:16]
+
+
+def _cache_path(cache_dir: str, signature: str) -> Path:
+    return Path(cache_dir) / f"index_{signature}.json"
+
+
+def _load_index_cache(cache_dir: str, signature: str) -> Optional[List[Dict]]:
+    path = _cache_path(cache_dir, signature)
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        chunks = data.get("chunks")
+        if isinstance(chunks, list):
+            return chunks
+    except (json.JSONDecodeError, OSError):
+        return None
+    return None
+
+
+def _save_index_cache(cache_dir: str, signature: str, chunks: List[Dict]) -> None:
+    cache_root = Path(cache_dir)
+    cache_root.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "saved_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "signature": signature,
+        "chunks": chunks,
+    }
+    _cache_path(cache_dir, signature).write_text(
+        json.dumps(payload), encoding="utf-8"
+    )
+
+
 def index_directory(
     directory: str,
     extensions: List[str],
     chunk_size: int = DEFAULT_CHUNK_SIZE,
     overlap: int = DEFAULT_CHUNK_OVERLAP,
     verbose: bool = False,
+    cache_dir: Optional[str] = DEFAULT_RAG_CACHE_DIR,
 ) -> List[Dict]:
-    """Index all matching files in a directory into chunks."""
+    """Index all matching files in a directory into chunks (with optional disk cache)."""
     root = Path(directory)
-    all_chunks = []
+    files = _collect_index_files(directory, extensions)
+
+    if cache_dir:
+        signature = _index_signature(files, chunk_size, overlap, extensions)
+        cached = _load_index_cache(cache_dir, signature)
+        if cached is not None:
+            print(f"  Cache hit ({signature}): reusing {len(cached)} chunks")
+            return cached
+
+    all_chunks: List[Dict] = []
     files_indexed = 0
-
-    for ext in extensions:
-        for file_path in sorted(root.rglob(f"*{ext}")):
-            rel = str(file_path.relative_to(root))
-
-            if any(part.startswith(".") for part in file_path.parts):
-                continue
-            if "__pycache__" in str(file_path):
-                continue
-
-            size = file_path.stat().st_size
-            if size > 500_000 or size == 0:
-                continue
-
-            chunks = chunk_file(str(file_path), chunk_size, overlap)
-            if chunks:
-                all_chunks.extend(chunks)
-                files_indexed += 1
-                if verbose:
-                    print(f"  Indexed: {rel} ({len(chunks)} chunks)")
+    for file_path in files:
+        rel = str(file_path.relative_to(root))
+        chunks = chunk_file(str(file_path), chunk_size, overlap)
+        if chunks:
+            all_chunks.extend(chunks)
+            files_indexed += 1
+            if verbose:
+                print(f"  Indexed: {rel} ({len(chunks)} chunks)")
 
     print(f"  Indexed {files_indexed} files -> {len(all_chunks)} chunks")
+
+    if cache_dir and all_chunks:
+        _save_index_cache(cache_dir, signature, all_chunks)
+        if verbose:
+            print(f"  Cached index to {cache_dir}/")
+
     return all_chunks
 
 
@@ -241,6 +321,7 @@ def run_rag_agent(
     top_k: int = DEFAULT_TOP_K,
     model: str = DEFAULT_MODEL,
     verbose: bool = False,
+    cache_dir: Optional[str] = DEFAULT_RAG_CACHE_DIR,
 ) -> None:
     if extensions is None:
         extensions = [".py", ".md", ".txt"]
@@ -251,12 +332,15 @@ def run_rag_agent(
     print(f"Directory : {Path(directory).resolve()}")
     print(f"Extensions: {', '.join(extensions)}")
     print(f"Model     : {model}")
-    print(f"Top-K     : {top_k}\n")
+    print(f"Top-K     : {top_k}")
+    print(f"Cache dir : {cache_dir or '(disabled)'}\n")
 
     # Phase 1: Index
     print("Phase 1: INDEXING")
     print("-" * 40)
-    chunks = index_directory(directory, extensions, verbose=verbose)
+    chunks = index_directory(
+        directory, extensions, verbose=verbose, cache_dir=cache_dir
+    )
     if not chunks:
         print("  No files found to index. Check directory and extensions.")
         return
@@ -338,6 +422,10 @@ Pattern:
     parser.add_argument("--extensions", nargs="+", default=[".py", ".md", ".txt"])
     parser.add_argument("--top-k", type=int, default=DEFAULT_TOP_K, help="Number of chunks to retrieve")
     parser.add_argument("--model", type=str, default=DEFAULT_MODEL)
+    parser.add_argument("--no-cache", action="store_true",
+                        help="Skip the on-disk index cache and rebuild from scratch")
+    parser.add_argument("--cache-dir", type=str, default=DEFAULT_RAG_CACHE_DIR,
+                        help="Directory to store the cached RAG index")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
 
@@ -354,6 +442,7 @@ Pattern:
             top_k=args.top_k,
             model=args.model,
             verbose=args.verbose,
+            cache_dir=None if args.no_cache else args.cache_dir,
         )
         return 0
     except KeyboardInterrupt:

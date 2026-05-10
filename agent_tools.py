@@ -1,79 +1,108 @@
-try:
-    from dotenv import load_dotenv
-except ModuleNotFoundError:
-    raise RuntimeError("Missing dependency: python-dotenv. Run 'python -m pip install -r requirements.txt' in your virtual environment.")
+"""
+Tool-Using Agent (Custom JSON Action Block Parsing)
 
-import os
-import json
+Demonstrates the simplest possible "agent in a loop" pattern. Unlike the
+function-calling agents (which use the LLM's native `tool_calls` field),
+this agent asks the LLM to emit a Markdown ```action JSON code block``` and
+parses it manually with regex.
+
+Pattern:
+    user task -> LLM emits ```action {tool_name, args}``` -> we run it
+              -> result fed back as the next user message
+              -> repeat until the LLM returns the `terminate` action
+
+Usage:
+    python agent_tools.py
+    python agent_tools.py --task "List Python files and read README"
+    python agent_tools.py --task "Read main.py" --verbose --max-iterations 5
+"""
+
+from __future__ import annotations
+
 import argparse
-import time
-from litellm import completion
-from litellm import exceptions as litellm_exceptions
+import json
+import os
+import sys
+from pathlib import Path
+from typing import Dict, List
 
-# Load environment variables from .env file
-load_dotenv()
+from llmlite_common import (
+    DEFAULT_MAX_ITERATIONS,
+    DEFAULT_MAX_TOKENS,
+    DEFAULT_MODEL,
+    call_with_retries,
+    get_text,
+    validate_api_key,
+)
 
-# Read API key
-DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "openai/gpt-4")
-api_key = os.getenv("GEMINI_API_KEY")
-if not api_key:
-    raise ValueError("GEMINI_API_KEY not found. Make sure it's in your .env file!")
 
-from litellm import completion
-from typing import List, Dict
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
-def extract_markdown_block(response: str, block_type: str = "json") -> str:
-    """Extract code block from response"""
-
-    if not '```' in response:
+def extract_markdown_block(response: str, block_type: str = "action") -> str:
+    """Extract the contents of the first ```<block_type> ... ``` fenced block."""
+    if "```" not in response:
         return response
 
-    code_block = response.split('```')[1].strip()
+    parts = response.split("```")
+    if len(parts) < 2:
+        return response
 
+    code_block = parts[1].strip()
     if code_block.startswith(block_type):
         code_block = code_block[len(block_type):].strip()
-
     return code_block
 
-def generate_response(messages: List[Dict]) -> str:
-    """Call LLM to get a response."""
-    response = completion(
-        model="openai/gpt-4o",
-        messages=messages,
-        max_tokens=1024
-    )
-    return response.choices[0].message.content.strip()
 
 def parse_action(response: str) -> Dict:
-    """Parse the LLM response into a structured action dictionary."""
+    """Parse the LLM response into a {tool_name, args} dictionary."""
     try:
-        response = extract_markdown_block(response, "action")
-        response_json = json.loads(response)
-        if "tool_name" in response_json and "args" in response_json:
-            return response_json
-        else:
-            return {"tool_name": "error", "args": {"message": "You must respond with a JSON tool invocation."}}
+        body = extract_markdown_block(response, "action")
+        parsed = json.loads(body)
+        if "tool_name" in parsed and "args" in parsed:
+            return parsed
+        return {
+            "tool_name": "error",
+            "args": {"message": "You must respond with a JSON tool invocation."},
+        }
     except json.JSONDecodeError:
-        return {"tool_name": "error", "args": {"message": "Invalid JSON response. You must respond with a JSON tool invocation."}}
+        return {
+            "tool_name": "error",
+            "args": {
+                "message": "Invalid JSON. Wrap your response in a ```action ... ``` block.",
+            },
+        }
+
+
+# ---------------------------------------------------------------------------
+# Tools
+# ---------------------------------------------------------------------------
 
 def list_files() -> List[str]:
     """List files in the current directory."""
-    return os.listdir(".")
+    return sorted(os.listdir("."))
+
 
 def read_file(file_name: str) -> str:
-    """Read a file's contents."""
+    """Read a file's contents (UTF-8)."""
     try:
-        with open(file_name, "r") as file:
-            return file.read()
+        return Path(file_name).read_text(encoding="utf-8")
     except FileNotFoundError:
-        return f"Error: {file_name} not found."
-    except Exception as e:
-        return f"Error: {str(e)}"
+        return f"Error: '{file_name}' not found."
+    except UnicodeDecodeError:
+        return f"Error: '{file_name}' is not a UTF-8 text file."
+    except Exception as exc:
+        return f"Error: {exc}"
 
-# Define system instructions (Agent Rules)
-agent_rules = [{
+
+# ---------------------------------------------------------------------------
+# Agent
+# ---------------------------------------------------------------------------
+
+AGENT_RULES = [{
     "role": "system",
-    "content": """
+    "content": """\
 You are an AI agent that can perform tasks by using available tools.
 
 Available tools:
@@ -87,85 +116,127 @@ Available tools:
     "read_file": {
         "description": "Reads the content of a file.",
         "parameters": {
-            "file_name": {
-                "type": "string",
-                "description": "The name of the file to read."
-            }
+            "file_name": {"type": "string", "description": "File to read."}
         }
     },
     "terminate": {
-        "description": "Ends the agent loop and provides a summary of the task.",
+        "description": "Ends the agent loop and returns a summary message.",
         "parameters": {
-            "message": {
-                "type": "string",
-                "description": "Summary message to return to the user."
-            }
+            "message": {"type": "string", "description": "Final summary."}
         }
     }
 }
 ```
 
-If a user asks about files, documents, or content, first list the files before reading them.
+If a user asks about files, list them before reading.
+When done, call the `terminate` tool.
 
-When you are done, terminate the conversation by using the "terminate" tool and I will provide the results to the user.
+Important: every response MUST contain an action. Use this format:
 
-Important!!! Every response MUST have an action.
-You must ALWAYS respond in this format:
-
-<Stop and think step by step. Parameters map to args. Insert a rich description of your step by step thoughts here.>
+<Stop and think step by step. Briefly describe your reasoning here.>
 
 ```action
 {
-    "tool_name": "insert tool_name",
-    "args": {...fill in any required arguments here...}
+    "tool_name": "<tool_name>",
+    "args": {...}
 }
-```"""
+```
+"""
 }]
 
-# Initialize agent parameters
-iterations = 0
-max_iterations = 10
 
-user_task = input("What would you like me to do? ")
+def run_agent(
+    user_task: str,
+    *,
+    model: str = DEFAULT_MODEL,
+    max_iterations: int = DEFAULT_MAX_ITERATIONS,
+    verbose: bool = False,
+) -> str:
+    """Run the agent loop. Returns the terminate message (or last result)."""
+    memory: List[Dict] = [{"role": "user", "content": user_task}]
+    final_message = ""
 
-memory = [{"role": "user", "content": user_task}]
+    for iteration in range(1, max_iterations + 1):
+        if verbose:
+            print(f"\n--- Iteration {iteration}/{max_iterations} ---")
 
-# The Agent Loop
-while iterations < max_iterations:
-    # 1. Construct prompt: Combine agent rules with memory
-    prompt = agent_rules + memory
+        prompt = AGENT_RULES + memory
+        response = call_with_retries(
+            model=model,
+            messages=prompt,
+            max_tokens=DEFAULT_MAX_TOKENS,
+            verbose=verbose,
+        )
+        text = get_text(response)
+        if verbose:
+            print(f"Agent response:\n{text}\n")
 
-    # 2. Generate response from LLM
-    print("Agent thinking...")
-    response = generate_response(prompt)
-    print(f"Agent response: {response}")
+        action = parse_action(text)
+        tool_name = action["tool_name"]
 
-    # 3. Parse response to determine action
-    action = parse_action(response)
-    result = "Action executed"
+        if tool_name == "list_files":
+            result = {"result": list_files()}
+        elif tool_name == "read_file":
+            result = {"result": read_file(action["args"].get("file_name", ""))}
+        elif tool_name == "error":
+            result = {"error": action["args"].get("message", "Unknown error")}
+        elif tool_name == "terminate":
+            final_message = action["args"].get("message", "")
+            print(f"\n{final_message}")
+            return final_message
+        else:
+            result = {"error": f"Unknown action: {tool_name}"}
 
-    if action["tool_name"] == "list_files":
-        result = {"result": list_files()}
-    elif action["tool_name"] == "read_file":
-        result = {"result": read_file(action["args"]["file_name"])}
-    elif action["tool_name"] == "error":
-        result = {"error": action["args"]["message"]}
-    elif action["tool_name"] == "terminate":
-        print(action["args"]["message"])
-        break
-    else:
-        result = {"error": "Unknown action: " + action["tool_name"]}
+        print(f"Action result: {result}")
 
-    print(f"Action result: {result}")
+        memory.extend([
+            {"role": "assistant", "content": text},
+            {"role": "user", "content": json.dumps(result)},
+        ])
 
-    # 5. Update memory with response and results
-    memory.extend([
-        {"role": "assistant", "content": response},
-        {"role": "user", "content": json.dumps(result)}
-    ])
+    print("\nMax iterations reached without terminating.")
+    return final_message
 
-    # 6. Check termination condition
-    if action["tool_name"] == "terminate":
-        break
 
-    iterations += 1
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Tool-using agent with custom JSON action-block parsing.",
+    )
+    parser.add_argument("--task", type=str, help="Task to run (otherwise interactive)")
+    parser.add_argument("--model", type=str, default=DEFAULT_MODEL)
+    parser.add_argument("--max-iterations", type=int, default=DEFAULT_MAX_ITERATIONS)
+    parser.add_argument("--verbose", action="store_true")
+    args = parser.parse_args()
+
+    validate_api_key()
+
+    task = args.task or input("What would you like me to do? ").strip()
+    if not task:
+        print("No task provided.")
+        return 1
+
+    try:
+        run_agent(
+            task,
+            model=args.model,
+            max_iterations=args.max_iterations,
+            verbose=args.verbose,
+        )
+        return 0
+    except KeyboardInterrupt:
+        print("\nInterrupted.")
+        return 1
+    except Exception as exc:
+        print(f"\nFailed: {exc}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

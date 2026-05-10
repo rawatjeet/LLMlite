@@ -12,14 +12,12 @@ from litellm import exceptions as litellm_exceptions
 # Load environment variables from .env file
 load_dotenv()
 
-# Read API key for Gemini Or OpenAI
-# api_key = os.getenv("OPENAI_API_KEY")
-# if not api_key:
-#     raise ValueError("OPENAI_API_KEY not found. Make sure it's in your .env file!")
-
-api_key = os.getenv("GEMINI_API_KEY")
+# Read API key (accepts either provider so DEFAULT_MODEL can target either)
+api_key = os.getenv("GEMINI_API_KEY") or os.getenv("OPENAI_API_KEY")
 if not api_key:
-    raise ValueError("GEMINI_API_KEY not found. Make sure it's in your .env file!")
+    raise ValueError(
+        "No API key found. Set GEMINI_API_KEY or OPENAI_API_KEY in your .env file!"
+    )
 
 from typing import List, Dict
 import sys
@@ -27,7 +25,7 @@ import hashlib
 import json
 from pathlib import Path
 
-DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "openai/gpt-4")
+DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "gemini/gemini-1.5-flash")
 DEFAULT_MAX_TOKENS = int(os.getenv("DEFAULT_MAX_TOKENS", "1024"))
 DEFAULT_TEMPERATURE = float(os.getenv("DEFAULT_TEMPERATURE", "0.0"))
 DEFAULT_TOP_P = float(os.getenv("DEFAULT_TOP_P", "1.0"))
@@ -125,7 +123,7 @@ def generate_response(messages: List[Dict], model: str | None = None, *,
          if verbose:
             print(f"Sleeping {sleep_seconds}s before retrying...")
          time.sleep(sleep_seconds)
-   return response.choices[0].message.content
+
 
 def extract_code_block(response: str) -> str:
    """Extract code block from response"""
@@ -237,8 +235,8 @@ def develop_custom_function(model: str | None = None, mock: bool = False):
 
 if __name__ == "__main__":
    parser = argparse.ArgumentParser(description="Quasi-Agent: generate function and tests via LLM")
-   parser.add_argument("--model", type=str, default=os.getenv("DEFAULT_MODEL", "openai/gpt-4"),
-                       help="Model to use (e.g., openai/gpt-4 or gpt-4.1-nano). Can also be set via DEFAULT_MODEL env var.")
+   parser.add_argument("--model", type=str, default=DEFAULT_MODEL,
+                       help="Model to use (e.g., gemini/gemini-1.5-flash or openai/gpt-4o). Can also be set via DEFAULT_MODEL env var.")
    parser.add_argument('--mock', action='store_true', help='Skip real API calls and use mock responses')
    parser.add_argument('--verbose', action='store_true', help='Show debugging output and caches')
    args = parser.parse_args()

@@ -1,87 +1,113 @@
-try:
-    from dotenv import load_dotenv
-except ModuleNotFoundError:
-    raise RuntimeError("Missing dependency: python-dotenv. Run 'python -m pip install -r requirements.txt' in your virtual environment.")
+"""
+Agent Loop with Native Function Calling — Batch Variant (Level 4, batch ops)
 
-import os
-import json
+Same as `agent_loop_with_function_calling.py` but with one extra tool:
+`read_all_files(directory)` reads every file in a directory in one tool
+call. This is dramatically cheaper for "summarize this project" tasks
+than calling `read_file` once per file.
+
+Usage:
+    python agent_loop_with_function_calling2.py
+    python agent_loop_with_function_calling2.py --task "Summarize all files in pdfs/"
+    python agent_loop_with_function_calling2.py --max-iterations 5 --verbose
+"""
+
+from __future__ import annotations
+
 import argparse
-import time
-from litellm import completion
-from litellm import exceptions as litellm_exceptions
+import json
+import os
+import sys
+from pathlib import Path
+from typing import Dict, List
 
-# Load environment variables from .env file
-load_dotenv()
+from llmlite_common import (
+    DEFAULT_MAX_ITERATIONS,
+    DEFAULT_MAX_TOKENS,
+    DEFAULT_MODEL,
+    call_with_retries,
+    validate_api_key,
+)
 
-# Read API key
-DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "openai/gpt-4")
-api_key = os.getenv("GEMINI_API_KEY")
-if not api_key:
-    raise ValueError("GEMINI_API_KEY not found. Make sure it's in your .env file!")
 
-from litellm import completion
-from typing import List, Dict
-
+# ---------------------------------------------------------------------------
+# Tools
+# ---------------------------------------------------------------------------
 
 def list_files(path: str = ".") -> List[str]:
-    """List files in the provided directory path (defaults to current dir).
-
-    Returns an error string inside a list if path is invalid.
-    """
+    """List files in the provided directory path (defaults to current dir)."""
     try:
-        return os.listdir(path)
-    except Exception as e:
-        return [f"Error: {str(e)}"]
+        return sorted(os.listdir(path))
+    except Exception as exc:
+        return [f"Error: {exc}"]
+
 
 def read_file(file_name: str) -> str:
-    """Read a file's contents."""
+    """Read a file's contents (UTF-8)."""
     try:
-        with open(file_name, "r") as file:
-            return file.read()
+        return Path(file_name).read_text(encoding="utf-8")
     except FileNotFoundError:
-        return f"Error: {file_name} not found."
-    except Exception as e:
-        return f"Error: {str(e)}"
-
-def terminate(message: str) -> None:
-    """Terminate the agent loop and provide a summary message."""
-    print(f"Termination message: {message}")
+        return f"Error: '{file_name}' not found."
+    except UnicodeDecodeError:
+        return f"Error: '{file_name}' is not a UTF-8 text file."
+    except Exception as exc:
+        return f"Error: {exc}"
 
 
 def read_all_files(directory: str) -> Dict[str, str]:
-    """Read all files in a directory and return a mapping filename -> content.
-
-    Only reads regular files (not directories). Returns error messages for unreadable files.
-    """
+    """Read every regular file in `directory` and return {name: content}."""
     out: Dict[str, str] = {}
     try:
-        for name in os.listdir(directory):
-            path = os.path.join(directory, name)
-            if os.path.isfile(path):
+        root = Path(directory)
+        for entry in sorted(root.iterdir()):
+            if entry.is_file():
                 try:
-                    with open(path, 'r', encoding='utf-8') as f:
-                        out[name] = f.read()
-                except Exception as e:
-                    out[name] = f"Error reading file: {e}"
+                    out[entry.name] = entry.read_text(encoding="utf-8")
+                except UnicodeDecodeError:
+                    out[entry.name] = "Error: not a UTF-8 text file."
+                except Exception as exc:
+                    out[entry.name] = f"Error reading file: {exc}"
         return out
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception as exc:
+        return {"error": str(exc)}
 
-tool_functions = {
+
+def terminate(message: str) -> None:
+    """Stop the loop and print the final summary."""
+    print(f"Termination message: {message}")
+
+
+def summarize_file_content(name: str, content: str) -> str:
+    """One-line summary heuristic for file content."""
+    if not content:
+        return f"{name}: (empty)"
+    stripped = content.strip()
+    first_line = next((ln for ln in stripped.splitlines() if ln.strip()), "")
+    if name.lower().endswith(".md") or first_line.startswith("#"):
+        return f"{name}: Markdown - {first_line}" if first_line else f"{name}: Markdown file"
+    excerpt = first_line if first_line else stripped[:120].replace("\n", " ")
+    return f"{name}: {excerpt}"
+
+
+TOOL_FUNCTIONS = {
     "list_files": list_files,
     "read_file": read_file,
+    "read_all_files": read_all_files,
     "terminate": terminate,
-    "read_all_files": read_all_files
 }
 
-tools = [
+TOOLS = [
     {
         "type": "function",
         "function": {
             "name": "list_files",
             "description": "Returns a list of files in the directory.",
-            "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": []}
-        }
+            "parameters": {
+                "type": "object",
+                "properties": {"path": {"type": "string"}},
+                "required": [],
+            },
+        },
     },
     {
         "type": "function",
@@ -91,9 +117,9 @@ tools = [
             "parameters": {
                 "type": "object",
                 "properties": {"file_name": {"type": "string"}},
-                "required": ["file_name"]
-            }
-        }
+                "required": ["file_name"],
+            },
+        },
     },
     {
         "type": "function",
@@ -103,149 +129,130 @@ tools = [
             "parameters": {
                 "type": "object",
                 "properties": {"directory": {"type": "string"}},
-                "required": ["directory"]
-            }
-        }
+                "required": ["directory"],
+            },
+        },
     },
     {
         "type": "function",
         "function": {
             "name": "terminate",
-            "description": "Terminates the conversation. No further actions or interactions are possible after this. Prints the provided message for the user.",
+            "description": (
+                "Terminates the conversation. No further actions or interactions are "
+                "possible after this. Prints the provided message for the user."
+            ),
             "parameters": {
                 "type": "object",
-                "properties": {
-                    "message": {"type": "string"},
-                },
-                "required": ["message"]
-            }
-        }
-    }
+                "properties": {"message": {"type": "string"}},
+                "required": ["message"],
+            },
+        },
+    },
 ]
 
-agent_rules = [{
+AGENT_RULES = [{
     "role": "system",
-    "content": """
-You are an AI agent that can perform tasks by using available tools.
-
-If a user asks about files, documents, or content, first list the files before reading them.
-
-When you are done, terminate the conversation by using the "terminate" tool and I will provide the results to the user.
-"""
+    "content": (
+        "You are an AI agent that can perform tasks by using available tools.\n\n"
+        "If a user asks about files, documents, or content, first list the files "
+        "before reading them. For 'all files' or 'every file' tasks, prefer "
+        "`read_all_files` over many `read_file` calls.\n\n"
+        "When you are done, terminate the conversation by using the 'terminate' tool."
+    ),
 }]
 
-# Initialize agent parameters
-iterations = 0
-max_iterations = 10
 
-# CLI args: support --mock and optional --task to run non-interactively
-parser = argparse.ArgumentParser()
-parser.add_argument('--mock', action='store_true', help='Run in mock mode without calling the LLM')
-parser.add_argument('--task', type=str, help='Optional task string to run (bypass interactive prompt)')
-args = parser.parse_args()
+# ---------------------------------------------------------------------------
+# Agent loop
+# ---------------------------------------------------------------------------
 
-if args.task:
-    user_task = args.task
-else:
-    user_task = input("What would you like me to do? ")
+def run_agent(
+    user_task: str,
+    *,
+    model: str = DEFAULT_MODEL,
+    max_iterations: int = DEFAULT_MAX_ITERATIONS,
+    verbose: bool = False,
+) -> None:
+    """Run the batch-capable function-calling agent loop."""
+    memory: List[Dict] = [{"role": "user", "content": user_task}]
 
-memory = [{"role": "user", "content": user_task}]
+    for iteration in range(1, max_iterations + 1):
+        if verbose:
+            print(f"\n--- Iteration {iteration}/{max_iterations} ---")
 
-def summarize_file_content(name: str, content: str) -> str:
-    """Return a one-line summary for a file's content using simple heuristics."""
-    if not content:
-        return f"{name}: (empty)"
-    s = content.strip()
-    # prefer first non-empty line
-    first_line = next((ln for ln in s.splitlines() if ln.strip()), '')
-    if name.lower().endswith('.md') or first_line.startswith('#'):
-        # markdown - use first header or first line
-        return f"{name}: Markdown - {first_line}" if first_line else f"{name}: Markdown file"
-    if name.lower().endswith('.log') or name.lower().endswith('.txt'):
-        # text/log - show first line or short excerpt
-        excerpt = first_line if first_line else (s[:120].replace('\n', ' '))
-        return f"{name}: {excerpt}"
-    # default: show short excerpt
-    excerpt = first_line if first_line else (s[:120].replace('\n', ' '))
-    return f"{name}: {excerpt}"
+        messages = AGENT_RULES + memory
+        response = call_with_retries(
+            model=model,
+            messages=messages,
+            tools=TOOLS,
+            max_tokens=DEFAULT_MAX_TOKENS,
+            verbose=verbose,
+        )
 
+        message = response.choices[0].message
+        tool_calls = getattr(message, "tool_calls", None)
 
-# The Agent Loop
-while iterations < max_iterations:
+        if not tool_calls:
+            print(f"Response: {message.content}")
+            return
 
-    messages = agent_rules + memory
-
-
-    # # If mock mode is enabled, bypass the LLM and perform heuristic actions
-    # if args.mock:
-    #     task = user_task.lower()
-    #     # handle list files
-    #     if 'list' in task and 'file' in task:
-    #         path = '.'
-    #         # try to detect 'in <dir>' phrase
-    #         import re as _re
-    #         m = _re.search(r'in\s+([\w\\/\.-]+)', user_task, flags=_re.IGNORECASE)
-    #         if m:
-    #             path = m.group(1)
-    #         files = list_files(path)
-    #         print('Mock mode - files:')
-    #         for f in files:
-    #             print(' -', f)
-    #         break
-    #     # handle read all files
-    #     if 'read all' in task or 'read each' in task or ('read' in task and 'files' in task):
-    #         import re as _re
-    #         m = _re.search(r'in\s+([\w\\/\.-]+)', user_task, flags=_re.IGNORECASE)
-    #         directory = m.group(1) if m else '.'
-    #         contents = read_all_files(directory)
-    #         if isinstance(contents, dict) and 'error' in contents:
-    #             print('Mock mode error:', contents['error'])
-    #             break
-    #         print(f"Mock mode - reading files in: {directory}")
-    #         for name, content in contents.items():
-    #             summary = summarize_file_content(name, content)
-    #             print(summary)
-    #         break
-    #     # fallback: echo the task
-    #     print('Mock mode - echoing task:')
-    #     print(user_task)
-    #     break
-
-    response = completion(
-        model=DEFAULT_MODEL,
-        messages=messages,
-        tools=tools,
-        max_tokens=1024
-    )
-
-    if response.choices[0].message.tool_calls:
-        tool = response.choices[0].message.tool_calls[0]
+        tool = tool_calls[0]
         tool_name = tool.function.name
         tool_args = json.loads(tool.function.arguments)
-
-        action = {
-            "tool_name": tool_name,
-            "args": tool_args
-        }
+        action = {"tool_name": tool_name, "args": tool_args}
 
         if tool_name == "terminate":
-            print(f"Termination message: {tool_args['message']}")
-            break
-        elif tool_name in tool_functions:
+            print(f"Termination message: {tool_args.get('message', '')}")
+            return
+
+        if tool_name in TOOL_FUNCTIONS:
             try:
-                result = {"result": tool_functions[tool_name](**tool_args)}
-            except Exception as e:
-                result = {"error":f"Error executing {tool_name}: {str(e)}"}
+                result = {"result": TOOL_FUNCTIONS[tool_name](**tool_args)}
+            except Exception as exc:
+                result = {"error": f"Error executing {tool_name}: {exc}"}
         else:
             result = {"error": f"Unknown tool: {tool_name}"}
 
         print(f"Executing: {tool_name} with args {tool_args}")
-        print(f"Result: {result}")
+        print(f"Result   : {str(result)[:500]}{'...' if len(str(result)) > 500 else ''}")
+
         memory.extend([
             {"role": "assistant", "content": json.dumps(action)},
-            {"role": "user", "content": json.dumps(result)}
+            {"role": "user", "content": json.dumps(result)},
         ])
-    else:
-        result = response.choices[0].message.content
-        print(f"Response: {result}")
-        break
+
+    print(f"\nMax iterations ({max_iterations}) reached without terminating.")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Agent loop with native function calling + batch read_all_files",
+    )
+    parser.add_argument("--task", type=str, help="Task to run (otherwise interactive)")
+    parser.add_argument("--model", type=str, default=DEFAULT_MODEL)
+    parser.add_argument("--max-iterations", type=int, default=DEFAULT_MAX_ITERATIONS)
+    parser.add_argument("--verbose", action="store_true")
+    args = parser.parse_args()
+
+    validate_api_key()
+
+    task = args.task or input("What would you like me to do? ").strip()
+    if not task:
+        print("No task provided.")
+        return 1
+
+    try:
+        run_agent(
+            task,
+            model=args.model,
+            max_iterations=args.max_iterations,
+            verbose=args.verbose,
+        )
+        return 0
+    except KeyboardInterrupt:
+        print("\nInterrupted.")
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

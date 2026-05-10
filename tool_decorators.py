@@ -13,11 +13,13 @@ from litellm import exceptions as litellm_exceptions
 # Load environment variables from .env file
 load_dotenv()
 
-# Read API key
-DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "openai/gpt-4")
-api_key = os.getenv("GEMINI_API_KEY")
+# Read API key (accepts either provider)
+DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "gemini/gemini-1.5-flash")
+api_key = os.getenv("GEMINI_API_KEY") or os.getenv("OPENAI_API_KEY")
 if not api_key:
-    raise ValueError("GEMINI_API_KEY not found. Make sure it's in your .env file!")
+    raise ValueError(
+        "No API key found. Set GEMINI_API_KEY or OPENAI_API_KEY in your .env file!"
+    )
 
 from litellm import completion
 from typing import List, Dict
@@ -184,14 +186,14 @@ def generate_response(prompt: Prompt) -> str:
 
     if not tools:
         response = completion(
-            model="openai/gpt-4o",
+            model=DEFAULT_MODEL,
             messages=messages,
             max_tokens=1024
         )
         result = response.choices[0].message.content
     else:
         response = completion(
-            model="openai/gpt-4o",
+            model=DEFAULT_MODEL,
             messages=messages,
             tools=tools,
             max_tokens=1024

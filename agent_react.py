@@ -101,24 +101,45 @@ def search_in_file(file_name: str, pattern: str) -> str:
 
 
 def shell_command(command: str) -> str:
-    """Run a safe read-only shell command (ls, cat, wc, head, find, grep)."""
+    """Run a safe read-only shell command.
+
+    Hardened: parses the command with shlex (so quoting is honored), validates
+    only the FIRST token against an allow-list, and runs without shell=True so
+    that chained payloads like `;`, `&&`, backticks, or `$(...)` cannot escape.
+    """
+    import shlex
     import subprocess
 
-    ALLOWED_PREFIXES = ("ls", "dir", "cat", "head", "tail", "wc", "find", "grep", "type", "echo")
-    cmd_lower = command.strip().lower()
-    if not any(cmd_lower.startswith(p) for p in ALLOWED_PREFIXES):
-        return f"Error: Only read-only commands are allowed ({', '.join(ALLOWED_PREFIXES)})."
+    ALLOWED_TOOLS = {"ls", "dir", "cat", "head", "tail", "wc", "find", "grep", "type", "echo"}
+
+    try:
+        argv = shlex.split(command, posix=(os.name != "nt"))
+    except ValueError as exc:
+        return f"Error: could not parse command: {exc}"
+    if not argv:
+        return "Error: empty command."
+
+    program = os.path.basename(argv[0]).lower()
+    if program not in ALLOWED_TOOLS:
+        allowed = ", ".join(sorted(ALLOWED_TOOLS))
+        return f"Error: '{program}' is not allowed. Allowed: {allowed}."
 
     try:
         result = subprocess.run(
-            command, shell=True, capture_output=True, text=True, timeout=10
+            argv,
+            shell=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
-        output = result.stdout + result.stderr
+        output = (result.stdout or "") + (result.stderr or "")
         return output.strip()[:5000] if output.strip() else "(no output)"
+    except FileNotFoundError:
+        return f"Error: command '{program}' not found on PATH."
     except subprocess.TimeoutExpired:
         return "Error: Command timed out (10s limit)."
-    except Exception as e:
-        return f"Error: {e}"
+    except Exception as exc:
+        return f"Error: {exc}"
 
 
 TOOL_REGISTRY: Dict[str, Callable] = {

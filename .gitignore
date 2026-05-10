@@ -5,4 +5,8 @@ logs/
 .agent_sessions/
 .resume_sessions/
 .job_search/
+.rag_cache/
 resumes_output/
+.venv/
+.DS_Store
+*.pyc
